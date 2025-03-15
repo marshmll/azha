@@ -3,8 +3,12 @@
 #include <iostream>
 #include <string>
 #include <memory>
+#include <map>
 #include <vector>
 #include <cstring>
+#include <optional>
+#include <set>
+
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 

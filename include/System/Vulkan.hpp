@@ -1,34 +1,72 @@
 #pragma once
 
+#include "Graphics/Window.hpp"
+
 namespace zh
 {
-class AzhaCore
+struct QueueFamilyIndices
+{
+    std::optional<uint32_t> graphicsFamily;
+    std::optional<uint32_t> presentFamily;
+
+    inline const bool isComplete() const { return this->graphicsFamily.has_value() && this->presentFamily.has_value(); }
+
+    inline const uint32_t getGraphicsFamily() const { return this->graphicsFamily.value_or(0); }
+
+    inline const uint32_t getPresentFamily() const { return this->presentFamily.value_or(0); }
+};
+
+class Vulkan
 {
   public:
-    AzhaCore();
+    Vulkan();
 
-    ~AzhaCore();
+    ~Vulkan();
 
     void cleanup();
 
-    const uint32_t getVulkanExtensionCount();
+    const uint32_t getExtensionCount();
+
+    Window createWindow(const unsigned int width, const unsigned int height, const std::string &title);
 
   private:
     VkInstance vkInstance;
     VkDebugUtilsMessengerEXT debugMessenger;
 
-    std::vector<const char *> validationLayers;
-    bool enableValidationLayers;
+    VkPhysicalDevice physicalDevice;
+    VkDevice device;
 
+    GLFWwindow *window;
+    VkSurfaceKHR surface;
+
+    VkQueue graphicsQueue;
+    VkQueue presentQueue;
+
+    std::vector<const char *> validationLayers;
+    std::vector<const char *> deviceExtensions;
+
+    bool enableValidationLayers;
     bool cleaned;
 
     void initValidationLayers();
 
     void initGLFW();
 
+    void initVulkanInstance();
+
     void initDebugMessenger();
 
-    void initVulkanInstance();
+    void pickPhysicalDevice();
+
+    void createLogicalDevice();
+
+    void initDeviceExtensions();
+
+    const int rateDeviceSuitability(VkPhysicalDevice device) const;
+
+    const QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) const;
+
+    const bool checkDeviceExtensionSupport(VkPhysicalDevice device) const;
 
     void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT &create_info);
 

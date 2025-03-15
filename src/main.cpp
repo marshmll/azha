@@ -1,18 +1,16 @@
 #include "stdafx.hpp"
-#include "Graphics/Window.hpp"
-#include "System/AzhaCore.hpp"
+#include "System/Vulkan.hpp"
 
 int main()
 {
-    zh::AzhaCore core;
+    zh::Vulkan vulkan;
 
-    zh::Window window(846, 484, "Vulkan!");
+    zh::Window window = vulkan.createWindow(846, 484, "Vulkan");
 
     do
     {
         window.pollEvents();
-    }
-    while (!window.shouldClose());
+    } while (!window.shouldClose());
 
     return 0;
 }

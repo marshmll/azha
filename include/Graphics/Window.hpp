@@ -4,16 +4,15 @@ namespace zh
 {
 class Window
 {
-  private:
-    GLFWwindow *window;
-
   public:
-    Window(const unsigned int width, const unsigned int height, const std::string &title);
-
-    ~Window();
+    Window(GLFWwindow *window, VkSurfaceKHR &surface);
 
     void pollEvents();
 
     const bool shouldClose();
+
+  private:
+    GLFWwindow *window;
+    VkSurfaceKHR &surface;
 };
 } // namespace zh

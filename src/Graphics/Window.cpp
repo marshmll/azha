@@ -1,18 +1,8 @@
 #include "stdafx.hpp"
 #include "Graphics/Window.hpp"
 
-zh::Window::Window(const unsigned int width, const unsigned int height, const std::string &title)
+zh::Window::Window(GLFWwindow *window, VkSurfaceKHR &surface) : window(window), surface(surface)
 {
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-
-    window = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
-}
-
-zh::Window::~Window()
-{
-    if (window)
-        glfwDestroyWindow(window);
 }
 
 void zh::Window::pollEvents()
