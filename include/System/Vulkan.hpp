@@ -50,7 +50,7 @@ class Vulkan
     VkQueue presentQueue;
 
     VkSwapchainKHR swapchain;
-    VkSurfaceFormatKHR swapchainImageFormat;
+    VkFormat swapchainImageFormat;
     VkExtent2D swapchainExtent;
     std::vector<VkImage> swapchainImages;
     std::vector<VkImageView> swapchainImageViews;

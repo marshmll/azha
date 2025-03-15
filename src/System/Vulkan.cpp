@@ -26,7 +26,7 @@ void zh::Vulkan::cleanup()
         if (enableValidationLayers)
             proxyDestroyDebugUtilsMessengerEXT(vkInstance, debugMessenger, nullptr);
 
-        if (window != nullptr)
+        if (device != VK_NULL_HANDLE)
         {
             for (auto &view : swapchainImageViews)
                 vkDestroyImageView(device, view, nullptr);
@@ -297,11 +297,11 @@ void zh::Vulkan::createSwapChain()
         throw std::runtime_error("Failed to create a swapchain.");
     }
 
-    vkGetSwapchainImages(device, swapchain, &image_count, nullptr);
+    vkGetSwapchainImagesKHR(device, swapchain, &image_count, nullptr);
     swapchainImages.resize(image_count);
-    vkGetSwapchainImages(device, swapchain, &image_count, swapchainImages.data());
+    vkGetSwapchainImagesKHR(device, swapchain, &image_count, swapchainImages.data());
 
-    swapchainImageFormat = format;
+    swapchainImageFormat = format.format;
     swapchainExtent = extent;
 }
 
