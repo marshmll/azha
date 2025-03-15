@@ -11,7 +11,6 @@ int main()
     do
     {
         window.pollEvents();
-
     }
     while (!window.shouldClose());
 

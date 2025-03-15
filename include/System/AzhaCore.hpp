@@ -4,8 +4,18 @@ namespace zh
 {
 class AzhaCore
 {
+  public:
+    AzhaCore();
+
+    ~AzhaCore();
+
+    void cleanup();
+
+    const uint32_t getVulkanExtensionCount();
+
   private:
     VkInstance vkInstance;
+    VkDebugUtilsMessengerEXT debugMessenger;
 
     std::vector<const char *> validationLayers;
     bool enableValidationLayers;
@@ -14,18 +24,29 @@ class AzhaCore
 
     void initValidationLayers();
 
+    void initGLFW();
+
+    void initDebugMessenger();
+
+    void initVulkanInstance();
+
+    void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT &create_info);
+
     const bool checkValidationLayerSupport();
 
-    void vulkanInit();
+    std::vector<const char *> getRequiredExtensions();
 
-  public:
-    AzhaCore();
+    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+                                                        VkDebugUtilsMessageTypeFlagsEXT messageType,
+                                                        const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
+                                                        void *pUserData);
 
-    ~AzhaCore();
+    static VkResult proxyCreateDebugUtilsMessengerEXT(VkInstance instance,
+                                                      const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
+                                                      const VkAllocationCallbacks *pAllocator,
+                                                      VkDebugUtilsMessengerEXT *pDebugMessenger);
 
-    void cleanup();
-
-    static const uint32_t getVulkanExtensionCount();
+    static void proxyDestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
+                                                   const VkAllocationCallbacks *pAllocator);
 };
-
 } // namespace zh
