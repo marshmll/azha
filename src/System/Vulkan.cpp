@@ -8,6 +8,7 @@
 zh::Vulkan::Vulkan() : physicalDevice(VK_NULL_HANDLE), window(nullptr), cleaned(false)
 {
     initValidationLayers();
+    initDeviceExtensions();
     initGLFW();
     initVulkanInstance();
     initDebugMessenger();
@@ -27,9 +28,10 @@ void zh::Vulkan::cleanup()
 
         if (window != nullptr)
         {
-            vkDestroyDevice(device, nullptr);
+            vkDestroySwapchainKHR(device, swapchain, nullptr);
             vkDestroySurfaceKHR(vkInstance, surface, nullptr);
             glfwDestroyWindow(window);
+            vkDestroyDevice(device, nullptr);
         }
 
         vkDestroyInstance(vkInstance, nullptr);
@@ -63,6 +65,7 @@ zh::Window zh::Vulkan::createWindow(const unsigned int width, const unsigned int
 
     pickPhysicalDevice();
     createLogicalDevice();
+    createSwapChain();
 
     return Window(window, surface);
 }
@@ -80,6 +83,11 @@ void zh::Vulkan::initValidationLayers()
 #endif
 
     validationLayers = {"VK_LAYER_KHRONOS_validation"};
+}
+
+void zh::Vulkan::initDeviceExtensions()
+{
+    deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 }
 
 void zh::Vulkan::initGLFW()
@@ -139,20 +147,6 @@ void zh::Vulkan::initVulkanInstance()
 
     if (vkCreateInstance(&create_info, nullptr, &vkInstance) != VK_SUCCESS)
         throw std::runtime_error("Failed to create a Vulkan Instance.");
-
-#ifndef NDEBUG
-    uint32_t extension_count = 0;
-    vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, nullptr);
-
-    std::vector<VkExtensionProperties> extensions(extension_count);
-
-    vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, extensions.data());
-
-    std::cout << "Available Vulkan Extensions: " << "\n";
-
-    for (const auto &extension : extensions)
-        std::cout << "    - " << extension.extensionName << std::endl;
-#endif
 }
 
 void zh::Vulkan::initDebugMessenger()
@@ -227,7 +221,8 @@ void zh::Vulkan::createLogicalDevice()
     create_info.queueCreateInfoCount = static_cast<uint32_t>(queue_create_infos.size());
     create_info.pQueueCreateInfos = queue_create_infos.data();
     create_info.pEnabledFeatures = &device_features;
-    create_info.enabledExtensionCount = 0;
+    create_info.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
+    create_info.ppEnabledExtensionNames = deviceExtensions.data();
 
     if (enableValidationLayers)
     {
@@ -241,7 +236,7 @@ void zh::Vulkan::createLogicalDevice()
 
     if (vkCreateDevice(physicalDevice, &create_info, nullptr, &device) != VK_SUCCESS)
     {
-        throw std::runtime_error("Failed to create a logical device from the picked physical device.");
+        throw std::runtime_error("Failed to create a logical device from the current physical device.");
     }
 
     // Retrieve Device Queues
@@ -249,9 +244,61 @@ void zh::Vulkan::createLogicalDevice()
     vkGetDeviceQueue(device, indices.getPresentFamily(), 0, &presentQueue);
 }
 
-void zh::Vulkan::initDeviceExtensions()
+void zh::Vulkan::createSwapChain()
 {
-    deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    SwapChainSupportDetails swap_chain_support = querySwapChainSupport(physicalDevice);
+    VkSurfaceFormatKHR format = chooseSwapSurfaceFormat(swap_chain_support.formats);
+    VkPresentModeKHR mode = chooseSwapPresentMode(swap_chain_support.presentModes);
+    VkExtent2D extent = chooseSwapExtent(swap_chain_support.capabilities);
+    uint32_t image_count = swap_chain_support.capabilities.minImageCount + 1;
+
+    if (swap_chain_support.capabilities.maxImageCount > 0 &&
+        image_count > swap_chain_support.capabilities.maxImageCount)
+        image_count = swap_chain_support.capabilities.maxImageCount;
+
+    VkSwapchainCreateInfoKHR create_info{};
+    create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    create_info.surface = surface;
+    create_info.minImageCount = image_count;
+    create_info.imageFormat = format.format;
+    create_info.imageColorSpace = format.colorSpace;
+    create_info.imageExtent = extent;
+    create_info.imageArrayLayers = 1;
+    create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+    QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+    uint32_t queueFamilyIndices[] = {indices.getGraphicsFamily(), indices.getPresentFamily()};
+
+    if (indices.graphicsFamily != indices.presentFamily)
+    {
+        create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+        create_info.queueFamilyIndexCount = 2;
+        create_info.pQueueFamilyIndices = queueFamilyIndices;
+    }
+    else
+    {
+        create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        create_info.queueFamilyIndexCount = 0;
+        create_info.pQueueFamilyIndices = nullptr;
+    }
+
+    create_info.preTransform = swap_chain_support.capabilities.currentTransform;
+    create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    create_info.presentMode = mode;
+    create_info.clipped = VK_TRUE;
+    create_info.oldSwapchain = VK_NULL_HANDLE;
+
+    if (vkCreateSwapchainKHR(device, &create_info, nullptr, &swapchain) != VK_SUCCESS)
+    {
+        throw std::runtime_error("Failed to create a swapchain.");
+    }
+
+    vkGetSwapchainImages(device, swapchain, &image_count, nullptr);
+    swapchainImages.resize(image_count);
+    vkGetSwapchainImages(device, swapchain, &image_count, swapchainImages.data());
+
+    swapchainImageFormat = format;
+    swapchainExtent = extent;
 }
 
 const int zh::Vulkan::rateDeviceSuitability(VkPhysicalDevice device) const
@@ -286,7 +333,17 @@ const int zh::Vulkan::rateDeviceSuitability(VkPhysicalDevice device) const
 
     // Require a device with extensions support.
     if (!checkDeviceExtensionSupport(device))
+    {
         score = -1;
+    }
+    // Require that swap chain is adequate
+    else
+    {
+        SwapChainSupportDetails details = querySwapChainSupport(device);
+
+        if (details.formats.empty() || details.presentModes.empty())
+            score = -1;
+    }
 
     return score;
 }
@@ -318,6 +375,76 @@ const zh::QueueFamilyIndices zh::Vulkan::findQueueFamilies(VkPhysicalDevice devi
     }
 
     return indices;
+}
+
+const zh::SwapChainSupportDetails zh::Vulkan::querySwapChainSupport(VkPhysicalDevice device) const
+{
+    SwapChainSupportDetails details;
+
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
+
+    uint32_t format_count = 0;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &format_count, nullptr);
+
+    if (format_count != 0)
+    {
+        details.formats.resize(format_count);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &format_count, details.formats.data());
+    }
+
+    uint32_t present_modes_count = 0;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &present_modes_count, nullptr);
+
+    if (present_modes_count != 0)
+    {
+        details.presentModes.resize(format_count);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &present_modes_count, details.presentModes.data());
+    }
+
+    return details;
+}
+
+VkSurfaceFormatKHR zh::Vulkan::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &available_formats)
+{
+    for (auto const &format : available_formats)
+    {
+        if (format.format == VK_FORMAT_B8G8R8_SRGB && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+            return format;
+    }
+
+    return available_formats[0];
+}
+
+VkPresentModeKHR zh::Vulkan::chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &available_modes)
+{
+    for (auto const &mode : available_modes)
+    {
+        if (mode == VK_PRESENT_MODE_MAILBOX_KHR)
+            return mode;
+    }
+
+    return VK_PRESENT_MODE_FIFO_KHR;
+}
+
+VkExtent2D zh::Vulkan::chooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities)
+{
+    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
+    {
+        return capabilities.currentExtent;
+    }
+
+    int width, height;
+
+    glfwGetFramebufferSize(window, &width, &height);
+
+    VkExtent2D actual_extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
+
+    actual_extent.width =
+        std::clamp(actual_extent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+    actual_extent.height =
+        std::clamp(actual_extent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+
+    return actual_extent;
 }
 
 const bool zh::Vulkan::checkDeviceExtensionSupport(VkPhysicalDevice device) const

@@ -16,6 +16,13 @@ struct QueueFamilyIndices
     inline const uint32_t getPresentFamily() const { return this->presentFamily.value_or(0); }
 };
 
+struct SwapChainSupportDetails
+{
+    VkSurfaceCapabilitiesKHR capabilities;
+    std::vector<VkSurfaceFormatKHR> formats;
+    std::vector<VkPresentModeKHR> presentModes;
+};
+
 class Vulkan
 {
   public:
@@ -42,6 +49,11 @@ class Vulkan
     VkQueue graphicsQueue;
     VkQueue presentQueue;
 
+    VkSwapchainKHR swapchain;
+    VkSurfaceFormatKHR swapchainImageFormat;
+    VkExtent2D swapchainExtent;
+    std::vector<VkImage> swapchainImages;
+
     std::vector<const char *> validationLayers;
     std::vector<const char *> deviceExtensions;
 
@@ -49,6 +61,8 @@ class Vulkan
     bool cleaned;
 
     void initValidationLayers();
+
+    void initDeviceExtensions();
 
     void initGLFW();
 
@@ -60,11 +74,19 @@ class Vulkan
 
     void createLogicalDevice();
 
-    void initDeviceExtensions();
+    void createSwapChain();
 
     const int rateDeviceSuitability(VkPhysicalDevice device) const;
 
     const QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) const;
+
+    const SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) const;
+
+    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &available_formats);
+
+    VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &available_modes);
+
+    VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities);
 
     const bool checkDeviceExtensionSupport(VkPhysicalDevice device) const;
 
