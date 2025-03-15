@@ -10,6 +10,7 @@
 #include <cstring>
 #include <optional>
 #include <set>
+#include <fstream>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>

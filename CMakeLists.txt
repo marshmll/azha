@@ -12,3 +12,12 @@ target_compile_features(azha PRIVATE cxx_std_17 c_std_99)
 target_precompile_headers(azha PUBLIC include/stdafx.hpp)
 
 target_link_libraries(azha PRIVATE glfw glm vulkan)
+
+add_custom_target(copy_assets
+    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
+        "${CMAKE_SOURCE_DIR}/Assets/"
+        "${CMAKE_BINARY_DIR}/Assets"
+    COMMENT "Copying Assets folder"
+)
+
+add_dependencies(azha copy_assets)

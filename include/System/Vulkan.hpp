@@ -37,6 +37,9 @@ class Vulkan
     Window createWindow(const unsigned int width, const unsigned int height, const std::string &title);
 
   private:
+    std::vector<const char *> validationLayers;
+    std::vector<const char *> deviceExtensions;
+
     VkInstance vkInstance;
     VkDebugUtilsMessengerEXT debugMessenger;
 
@@ -55,8 +58,10 @@ class Vulkan
     std::vector<VkImage> swapchainImages;
     std::vector<VkImageView> swapchainImageViews;
 
-    std::vector<const char *> validationLayers;
-    std::vector<const char *> deviceExtensions;
+    VkRenderPass renderPass;
+    VkPipelineLayout pipelineLayout;
+
+    VkPipeline graphicsPipeline;
 
     bool enableValidationLayers;
     bool cleaned;
@@ -79,6 +84,10 @@ class Vulkan
 
     void createImageViews();
 
+    void createRenderPass();
+
+    void createGraphicsPipeline();
+
     const int rateDeviceSuitability(VkPhysicalDevice device) const;
 
     const QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) const;
@@ -97,7 +106,11 @@ class Vulkan
 
     const bool checkValidationLayerSupport();
 
+    VkShaderModule createShaderModule(std::vector<char> &code);
+
     std::vector<const char *> getRequiredExtensions();
+
+    std::vector<char> readFile(const std::string &filename);
 
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
                                                         VkDebugUtilsMessageTypeFlagsEXT messageType,

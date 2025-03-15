@@ -12,5 +12,6 @@ int main()
         window.pollEvents();
     } while (!window.shouldClose());
 
+
     return 0;
 }
