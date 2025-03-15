@@ -53,6 +53,7 @@ class Vulkan
     VkSurfaceFormatKHR swapchainImageFormat;
     VkExtent2D swapchainExtent;
     std::vector<VkImage> swapchainImages;
+    std::vector<VkImageView> swapchainImageViews;
 
     std::vector<const char *> validationLayers;
     std::vector<const char *> deviceExtensions;
@@ -75,6 +76,8 @@ class Vulkan
     void createLogicalDevice();
 
     void createSwapChain();
+
+    void createImageViews();
 
     const int rateDeviceSuitability(VkPhysicalDevice device) const;
 

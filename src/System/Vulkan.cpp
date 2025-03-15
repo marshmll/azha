@@ -28,6 +28,9 @@ void zh::Vulkan::cleanup()
 
         if (window != nullptr)
         {
+            for (auto &view : swapchainImageViews)
+                vkDestroyImageView(device, view, nullptr);
+
             vkDestroySwapchainKHR(device, swapchain, nullptr);
             vkDestroySurfaceKHR(vkInstance, surface, nullptr);
             glfwDestroyWindow(window);
@@ -66,6 +69,7 @@ zh::Window zh::Vulkan::createWindow(const unsigned int width, const unsigned int
     pickPhysicalDevice();
     createLogicalDevice();
     createSwapChain();
+    createImageViews();
 
     return Window(window, surface);
 }
@@ -299,6 +303,34 @@ void zh::Vulkan::createSwapChain()
 
     swapchainImageFormat = format;
     swapchainExtent = extent;
+}
+
+void zh::Vulkan::createImageViews()
+{
+    swapchainImageViews.resize(swapchainImages.size());
+
+    for (int i = 0; i < swapchainImages.size(); ++i)
+    {
+        VkImageViewCreateInfo create_info{};
+        create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        create_info.image = swapchainImages[i];
+        create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        create_info.format = swapchainImageFormat;
+        create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        create_info.subresourceRange.baseMipLevel = 0;
+        create_info.subresourceRange.levelCount = 1;
+        create_info.subresourceRange.baseArrayLayer = 0;
+        create_info.subresourceRange.layerCount = 1;
+
+        if (vkCreateImageView(device, &create_info, nullptr, &swapchainImageViews[i]) != VK_SUCCESS)
+        {
+            throw std::runtime_error("Failed to create an image view.");
+        }
+    }
 }
 
 const int zh::Vulkan::rateDeviceSuitability(VkPhysicalDevice device) const
