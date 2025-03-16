@@ -26,17 +26,29 @@ struct SwapChainSupportDetails
 class Vulkan
 {
   public:
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// PUBLIC METHODS //////////////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
     Vulkan();
 
     ~Vulkan();
 
     void cleanup();
 
-    const uint32_t getExtensionCount();
-
     Window createWindow(const unsigned int width, const unsigned int height, const std::string &title);
 
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// PUBLIC STATIC METHODS ///////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    static const uint32_t getExtensionCount();
+
   private:
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// PRIVATE ATTRIBUTES //////////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
     std::vector<const char *> validationLayers;
     std::vector<const char *> deviceExtensions;
 
@@ -57,6 +69,7 @@ class Vulkan
     VkExtent2D swapchainExtent;
     std::vector<VkImage> swapchainImages;
     std::vector<VkImageView> swapchainImageViews;
+    std::vector<VkFramebuffer> swapchainFramebuffers;
 
     VkRenderPass renderPass;
     VkPipelineLayout pipelineLayout;
@@ -65,6 +78,10 @@ class Vulkan
 
     bool enableValidationLayers;
     bool cleaned;
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// PRIVATE METHODS /////////////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     void initValidationLayers();
 
@@ -80,13 +97,15 @@ class Vulkan
 
     void createLogicalDevice();
 
-    void createSwapChain();
+    void createSwapchain();
 
     void createImageViews();
 
     void createRenderPass();
 
     void createGraphicsPipeline();
+
+    void createFramebuffers();
 
     const int rateDeviceSuitability(VkPhysicalDevice device) const;
 
@@ -112,17 +131,21 @@ class Vulkan
 
     std::vector<char> readFile(const std::string &filename);
 
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// PRIVATE STATIC METHODS //////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
                                                         VkDebugUtilsMessageTypeFlagsEXT messageType,
                                                         const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
                                                         void *pUserData);
 
-    static VkResult proxyCreateDebugUtilsMessengerEXT(VkInstance instance,
-                                                      const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
-                                                      const VkAllocationCallbacks *pAllocator,
-                                                      VkDebugUtilsMessengerEXT *pDebugMessenger);
+    static VkResult createDebugUtilsMessengerEXT(VkInstance instance,
+                                                 const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
+                                                 const VkAllocationCallbacks *pAllocator,
+                                                 VkDebugUtilsMessengerEXT *pDebugMessenger);
 
-    static void proxyDestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
-                                                   const VkAllocationCallbacks *pAllocator);
+    static void destroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
+                                              const VkAllocationCallbacks *pAllocator);
 };
 } // namespace zh

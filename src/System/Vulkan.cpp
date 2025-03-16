@@ -24,10 +24,13 @@ void zh::Vulkan::cleanup()
     if (!cleaned)
     {
         if (enableValidationLayers)
-            proxyDestroyDebugUtilsMessengerEXT(vkInstance, debugMessenger, nullptr);
+            destroyDebugUtilsMessengerEXT(vkInstance, debugMessenger, nullptr);
 
         if (device != VK_NULL_HANDLE)
         {
+            for (auto &framebuffer : swapchainFramebuffers)
+                vkDestroyFramebuffer(device, framebuffer, nullptr);
+
             for (auto &view : swapchainImageViews)
                 vkDestroyImageView(device, view, nullptr);
 
@@ -46,14 +49,6 @@ void zh::Vulkan::cleanup()
     }
 }
 
-const uint32_t zh::Vulkan::getExtensionCount()
-{
-    uint32_t extension_count = 0;
-    vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, nullptr);
-
-    return extension_count;
-}
-
 zh::Window zh::Vulkan::createWindow(const unsigned int width, const unsigned int height, const std::string &title)
 {
     if (window != nullptr)
@@ -65,18 +60,29 @@ zh::Window zh::Vulkan::createWindow(const unsigned int width, const unsigned int
     window = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
 
     if (glfwCreateWindowSurface(vkInstance, window, nullptr, &surface))
-    {
         throw std::runtime_error("Failed to create window surface.");
-    }
 
     pickPhysicalDevice();
     createLogicalDevice();
-    createSwapChain();
+    createSwapchain();
     createImageViews();
     createRenderPass();
     createGraphicsPipeline();
+    createFramebuffers();
 
     return Window(window, surface);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// PUBLIC STATIC METHODS ///////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+const uint32_t zh::Vulkan::getExtensionCount()
+{
+    uint32_t extension_count = 0;
+    vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, nullptr);
+
+    return extension_count;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -131,12 +137,9 @@ void zh::Vulkan::initVulkanInstance()
     // Avoid VK_ERROR_INCOMPATIBLE_DRIVER
     glfw_extensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
     create_info.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-    create_info.enabledExtensionCount = static_cast<uint32_t>(glfw_extensions.size());
-    create_info.ppEnabledExtensionNames = glfw_extensions.data();
-#else
-    create_info.enabledExtensionCount = static_cast<uint32_t>(glfw_extensions.size());
-    create_info.ppEnabledExtensionNames = glfw_extensions.data();
 #endif
+    create_info.enabledExtensionCount = static_cast<uint32_t>(glfw_extensions.size());
+    create_info.ppEnabledExtensionNames = glfw_extensions.data();
 
     // Validation Layers
     VkDebugUtilsMessengerCreateInfoEXT debug_create_info{};
@@ -166,10 +169,8 @@ void zh::Vulkan::initDebugMessenger()
     VkDebugUtilsMessengerCreateInfoEXT create_info;
     populateDebugMessengerCreateInfo(create_info);
 
-    if (proxyCreateDebugUtilsMessengerEXT(vkInstance, &create_info, nullptr, &debugMessenger) != VK_SUCCESS)
-    {
+    if (createDebugUtilsMessengerEXT(vkInstance, &create_info, nullptr, &debugMessenger) != VK_SUCCESS)
         throw std::runtime_error("Failed to initialize debug messenger.");
-    }
 }
 
 void zh::Vulkan::pickPhysicalDevice()
@@ -194,13 +195,9 @@ void zh::Vulkan::pickPhysicalDevice()
     }
 
     if (candidate_devices.rbegin()->first >= 0)
-    {
         physicalDevice = candidate_devices.rbegin()->second;
-    }
     else
-    {
         throw std::runtime_error("Failed to find suitable GPU(s)");
-    }
 }
 
 void zh::Vulkan::createLogicalDevice()
@@ -244,16 +241,14 @@ void zh::Vulkan::createLogicalDevice()
     }
 
     if (vkCreateDevice(physicalDevice, &create_info, nullptr, &device) != VK_SUCCESS)
-    {
         throw std::runtime_error("Failed to create a logical device from the current physical device.");
-    }
 
     // Retrieve Device Queues
     vkGetDeviceQueue(device, indices.getGraphicsFamily(), 0, &graphicsQueue);
     vkGetDeviceQueue(device, indices.getPresentFamily(), 0, &presentQueue);
 }
 
-void zh::Vulkan::createSwapChain()
+void zh::Vulkan::createSwapchain()
 {
     SwapChainSupportDetails swap_chain_support = querySwapChainSupport(physicalDevice);
     VkSurfaceFormatKHR format = chooseSwapSurfaceFormat(swap_chain_support.formats);
@@ -367,9 +362,7 @@ void zh::Vulkan::createRenderPass()
     render_pass_info.pSubpasses = &subpass;
 
     if (vkCreateRenderPass(device, &render_pass_info, nullptr, &renderPass) != VK_SUCCESS)
-    {
         throw std::runtime_error("Failed to create a Render Pass.");
-    }
 }
 
 void zh::Vulkan::createGraphicsPipeline()
@@ -438,7 +431,7 @@ void zh::Vulkan::createGraphicsPipeline()
     rasterization_state_info.rasterizerDiscardEnable = VK_FALSE;
     rasterization_state_info.polygonMode = VK_POLYGON_MODE_FILL;
     rasterization_state_info.lineWidth = 1.f;
-    rasterization_state_info.cullMode = VK_CULL_MODE_BACK_BIT;;
+    rasterization_state_info.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterization_state_info.frontFace = VK_FRONT_FACE_CLOCKWISE;
     rasterization_state_info.depthBiasEnable = VK_FALSE;
     rasterization_state_info.depthBiasConstantFactor = 0.f;
@@ -512,13 +505,36 @@ void zh::Vulkan::createGraphicsPipeline()
     graphics_pipeline_info.basePipelineHandle = VK_NULL_HANDLE;
     graphics_pipeline_info.basePipelineIndex = -1;
 
-    if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &graphics_pipeline_info, nullptr, &graphicsPipeline) != VK_SUCCESS)
+    if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &graphics_pipeline_info, nullptr, &graphicsPipeline) !=
+        VK_SUCCESS)
     {
         throw std::runtime_error("Failed to create Graphics Pipeline.");
     }
 
     vkDestroyShaderModule(device, frag_shader_module, nullptr);
     vkDestroyShaderModule(device, vert_shader_module, nullptr);
+}
+
+void zh::Vulkan::createFramebuffers()
+{
+    swapchainFramebuffers.resize(swapchainImageViews.size());
+
+    for (size_t i = 0; i < swapchainImageViews.size(); ++i)
+    {
+        VkImageView attachments[] = {swapchainImageViews[i]};
+
+        VkFramebufferCreateInfo create_info{};
+        create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        create_info.renderPass = renderPass;
+        create_info.attachmentCount = 1;
+        create_info.pAttachments = attachments;
+        create_info.width = swapchainExtent.width;
+        create_info.height = swapchainExtent.height;
+        create_info.layers = 1;
+
+        if (vkCreateFramebuffer(device, &create_info, nullptr, &swapchainFramebuffers[i]) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create a framebuffer.");
+    }
 }
 
 const int zh::Vulkan::rateDeviceSuitability(VkPhysicalDevice device) const
@@ -529,6 +545,7 @@ const int zh::Vulkan::rateDeviceSuitability(VkPhysicalDevice device) const
     VkPhysicalDeviceFeatures features;
     vkGetPhysicalDeviceProperties(device, &properties);
     vkGetPhysicalDeviceFeatures(device, &features);
+    bool extension_support = checkDeviceExtensionSupport(device);
 
     // Prefer discrete GPU over integrated GPU.
     if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
@@ -551,19 +568,17 @@ const int zh::Vulkan::rateDeviceSuitability(VkPhysicalDevice device) const
     if (!findQueueFamilies(device).isComplete())
         score = -1;
 
-    // Require a device with extensions support.
-    if (!checkDeviceExtensionSupport(device))
-    {
-        score = -1;
-    }
     // Require that swap chain is adequate
-    else
+    if (extension_support)
     {
         SwapChainSupportDetails details = querySwapChainSupport(device);
-
         if (details.formats.empty() || details.presentModes.empty())
             score = -1;
     }
+
+    // Require a device with extensions support.
+    if (!extension_support)
+        score = -1;
 
     return score;
 }
@@ -649,9 +664,7 @@ VkPresentModeKHR zh::Vulkan::chooseSwapPresentMode(const std::vector<VkPresentMo
 VkExtent2D zh::Vulkan::chooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities)
 {
     if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
-    {
         return capabilities.currentExtent;
-    }
 
     int width, height;
 
@@ -678,9 +691,7 @@ const bool zh::Vulkan::checkDeviceExtensionSupport(VkPhysicalDevice device) cons
     std::set<std::string> required_extensions(deviceExtensions.begin(), deviceExtensions.end());
 
     for (const auto &extension : available_extensions)
-    {
         required_extensions.erase(extension.extensionName);
-    }
 
     return required_extensions.empty();
 }
@@ -738,9 +749,7 @@ VkShaderModule zh::Vulkan::createShaderModule(std::vector<char> &code)
 
     VkShaderModule shader_module;
     if (vkCreateShaderModule(device, &create_info, nullptr, &shader_module) != VK_SUCCESS)
-    {
         throw std::runtime_error("Failed to create a shader module.");
-    }
 
     return shader_module;
 }
@@ -755,9 +764,7 @@ std::vector<const char *> zh::Vulkan::getRequiredExtensions()
     std::vector<const char *> extensions(glfw_extensions, glfw_extensions + glfw_extension_count);
 
     if (enableValidationLayers)
-    {
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    }
 
     return extensions;
 }
@@ -767,9 +774,7 @@ std::vector<char> zh::Vulkan::readFile(const std::string &filename)
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
     if (!file.is_open())
-    {
         throw std::runtime_error("Failed to open file: " + filename);
-    }
 
     size_t file_size = (size_t)file.tellg();
     std::vector<char> buffer(file_size);
@@ -782,7 +787,7 @@ std::vector<char> zh::Vulkan::readFile(const std::string &filename)
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// STATIC METHODS //////////////////////////////////////////////////////////////////////////////////////////
+/// PRIVATE STATIC METHODS //////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 VKAPI_ATTR VkBool32 VKAPI_CALL zh::Vulkan::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -805,30 +810,25 @@ VKAPI_ATTR VkBool32 VKAPI_CALL zh::Vulkan::debugCallback(VkDebugUtilsMessageSeve
     return VK_FALSE;
 }
 
-VkResult zh::Vulkan::proxyCreateDebugUtilsMessengerEXT(VkInstance instance,
-                                                       const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
-                                                       const VkAllocationCallbacks *pAllocator,
-                                                       VkDebugUtilsMessengerEXT *pDebugMessenger)
+VkResult zh::Vulkan::createDebugUtilsMessengerEXT(VkInstance instance,
+                                                  const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
+                                                  const VkAllocationCallbacks *pAllocator,
+                                                  VkDebugUtilsMessengerEXT *pDebugMessenger)
 {
     auto fn = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
 
     if (fn != nullptr)
-    {
         return fn(instance, pCreateInfo, pAllocator, pDebugMessenger);
-    }
+
     else
-    {
         return VK_ERROR_EXTENSION_NOT_PRESENT;
-    }
 }
 
-void zh::Vulkan::proxyDestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
-                                                    const VkAllocationCallbacks *pAllocator)
+void zh::Vulkan::destroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
+                                               const VkAllocationCallbacks *pAllocator)
 {
     auto fn = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
 
     if (fn != nullptr)
-    {
         fn(instance, debugMessenger, pAllocator);
-    }
 }
