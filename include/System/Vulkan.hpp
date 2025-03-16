@@ -1,5 +1,9 @@
 #pragma once
 
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
+#include "vk_mem_alloc.h"
+
 #include "Graphics/Window.hpp"
 #include "Graphics/Vertex.hpp"
 
@@ -69,6 +73,8 @@ class Vulkan
     std::vector<const char *>       validationLayers;
     std::vector<const char *>       deviceExtensions;
 
+    VmaAllocator                    allocator;
+
     VkInstance                      vkInstance;
     VkDebugUtilsMessengerEXT        debugMessenger;
 
@@ -93,6 +99,7 @@ class Vulkan
     VkPipeline                      graphicsPipeline;
 
     VkCommandPool                   commandPool;
+    VkCommandPool                   transientCommandPool;
     std::vector<VkCommandBuffer>    commandBuffers;
 
     std::vector<VkSemaphore>        imageAvailableSemaphores;
@@ -101,7 +108,7 @@ class Vulkan
     uint32_t                        currentFrame;
 
     VkBuffer                        vertexBuffer;
-    VkDeviceMemory                  vertexBufferMemory;
+    VmaAllocation                   vertexBufferMemory;
 
     bool                            framebufferResized;
     bool                            enableValidationLayers;
@@ -112,6 +119,8 @@ class Vulkan
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /// PRIVATE METHODS /////////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    void initMemoryAllocator();
 
     void initValidationLayers();
 
@@ -137,7 +146,7 @@ class Vulkan
 
     void createFramebuffers();
 
-    void createCommandPool();
+    void createCommandPools();
 
     void createVertexBuffer();
 
@@ -149,6 +158,8 @@ class Vulkan
 
     void cleanup();
 
+    void cleanupMemoryAllocator();
+
     void cleanupSwapchain();
 
     void cleanupVertexBuffer();
@@ -159,7 +170,7 @@ class Vulkan
 
     void cleanupSyncObjects();
 
-    void cleanupCommandPool();
+    void cleanupCommandPools();
 
     void cleanupDevice();
 
@@ -193,7 +204,11 @@ class Vulkan
 
     std::vector<const char *> getRequiredExtensions();
 
-    const uint32_t findMemoryType(const uint32_t type_filter, VkMemoryPropertyFlags properties);
+    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
+                      VmaMemoryUsage memory_usage, VmaAllocationCreateFlags allocation_flags, VkBuffer &buffer,
+                      VmaAllocation &buffer_memory);
+
+    void copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size);
 
     void recordCommandBuffer(VkCommandBuffer command_buffer, const uint32_t image_index);
 

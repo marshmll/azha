@@ -36,12 +36,13 @@ zh::Window zh::Vulkan::createWindow(const unsigned int width, const unsigned int
 
     pickPhysicalDevice();
     createLogicalDevice();
+    initMemoryAllocator();
     createSwapchain();
     createImageViews();
     createRenderPass();
     createGraphicsPipeline();
     createFramebuffers();
-    createCommandPool();
+    createCommandPools();
     createVertexBuffer();
     createCommandBuffers();
     createSyncObjects();
@@ -173,7 +174,7 @@ void zh::Vulkan::initVulkanInstance()
     app_info.applicationVersion = VK_MAKE_VERSION(0, 0, 1);
     app_info.pEngineName = "Azha";
     app_info.engineVersion = VK_MAKE_VERSION(0, 0, 1);
-    app_info.apiVersion = VK_API_VERSION_1_0;
+    app_info.apiVersion = VK_API_VERSION_1_2;
 
     // Create info
     VkInstanceCreateInfo create_info{};
@@ -296,6 +297,24 @@ void zh::Vulkan::createLogicalDevice()
     vkGetDeviceQueue(device, indices.getPresentFamily(), 0, &presentQueue);
 }
 
+void zh::Vulkan::initMemoryAllocator()
+{
+    VmaVulkanFunctions vulkan_functions{};
+    vulkan_functions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
+    vulkan_functions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
+
+    VmaAllocatorCreateInfo allocator_create_info{};
+    allocator_create_info.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+    allocator_create_info.vulkanApiVersion = VK_API_VERSION_1_2;
+    allocator_create_info.physicalDevice = physicalDevice;
+    allocator_create_info.device = device;
+    allocator_create_info.instance = vkInstance;
+    allocator_create_info.pVulkanFunctions = &vulkan_functions;
+
+    if (vmaCreateAllocator(&allocator_create_info, &allocator) != VK_SUCCESS)
+        throw std::runtime_error("Failed to initialize Vulkan Memory Allocator.");
+}
+
 void zh::Vulkan::createSwapchain()
 {
     SwapchainSupportDetails swap_chain_support = querySwapchainSupport(physicalDevice);
@@ -319,13 +338,13 @@ void zh::Vulkan::createSwapchain()
     create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
-    uint32_t queueFamilyIndices[] = {indices.getGraphicsFamily(), indices.getPresentFamily()};
+    uint32_t queue_family_indices[] = {indices.getGraphicsFamily(), indices.getPresentFamily()};
 
     if (indices.graphicsFamily != indices.presentFamily)
     {
         create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
         create_info.queueFamilyIndexCount = 2;
-        create_info.pQueueFamilyIndices = queueFamilyIndices;
+        create_info.pQueueFamilyIndices = queue_family_indices;
     }
     else
     {
@@ -598,49 +617,53 @@ void zh::Vulkan::createFramebuffers()
     }
 }
 
-void zh::Vulkan::createCommandPool()
+void zh::Vulkan::createCommandPools()
 {
     QueueFamilyIndices queue_family_indices = findQueueFamilies(physicalDevice);
 
-    VkCommandPoolCreateInfo create_info{};
-    create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    create_info.queueFamilyIndex = queue_family_indices.getGraphicsFamily();
+    VkCommandPoolCreateInfo command_pool_info{};
+    command_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    command_pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    command_pool_info.queueFamilyIndex = queue_family_indices.getGraphicsFamily();
 
-    if (vkCreateCommandPool(device, &create_info, nullptr, &commandPool) != VK_SUCCESS)
-        throw std::runtime_error("Failed to create a Command Pool.");
+    if (vkCreateCommandPool(device, &command_pool_info, nullptr, &commandPool) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create the Command Pool.");
+
+    VkCommandPoolCreateInfo transient_command_pool_info{};
+    transient_command_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    transient_command_pool_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+    transient_command_pool_info.queueFamilyIndex = queue_family_indices.getGraphicsFamily();
+
+    if (vkCreateCommandPool(device, &transient_command_pool_info, nullptr, &transientCommandPool) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create a transient Command Pool.");
 }
 
 void zh::Vulkan::createVertexBuffer()
 {
-    VkBufferCreateInfo create_info{};
-    create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    create_info.size = sizeof(vertices);
-    create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    create_info.flags = 0;
+    VkDeviceSize buffer_size = sizeof(vertices);
 
-    if (vkCreateBuffer(device, &create_info, nullptr, &vertexBuffer) != VK_SUCCESS)
-        throw std::runtime_error("Failed to create a Vertex Buffer.");
+    VkBuffer staging_buffer;
+    VmaAllocation staging_buffer_memory;
 
-    VkMemoryRequirements mem_requirements{};
-    vkGetBufferMemoryRequirements(device, vertexBuffer, &mem_requirements);
-
-    VkMemoryAllocateInfo alloc_info{};
-    alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    alloc_info.allocationSize = mem_requirements.size;
-    alloc_info.memoryTypeIndex = findMemoryType(
-        mem_requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-    if (vkAllocateMemory(device, &alloc_info, nullptr, &vertexBufferMemory) != VK_SUCCESS)
-        throw std::runtime_error("Failed to allocate Vertex Buffer Memory.");
-
-    vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory, 0);
+    createBuffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, VMA_MEMORY_USAGE_CPU_ONLY,
+                 VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
+                     VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+                 staging_buffer, staging_buffer_memory);
 
     void *data;
-    vkMapMemory(device, vertexBufferMemory, 0, create_info.size, 0, &data);
-    std::memcpy(data, vertices, static_cast<size_t>(create_info.size));
-    vkUnmapMemory(device, vertexBufferMemory);
+
+    vmaMapMemory(allocator, staging_buffer_memory, &data);
+    std::memcpy(data, vertices, static_cast<size_t>(buffer_size));
+    vmaUnmapMemory(allocator, staging_buffer_memory);
+
+    createBuffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                 VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, VMA_MEMORY_USAGE_AUTO, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                 vertexBuffer, vertexBufferMemory);
+
+    copyBuffer(staging_buffer, vertexBuffer, buffer_size);
+
+    vmaDestroyBuffer(allocator, staging_buffer, staging_buffer_memory);
 }
 
 void zh::Vulkan::createCommandBuffers()
@@ -715,7 +738,8 @@ void zh::Vulkan::cleanup()
             cleanupPipeline();
             cleanupRenderPass();
             cleanupSyncObjects();
-            cleanupCommandPool();
+            cleanupCommandPools();
+            cleanupMemoryAllocator();
             cleanupDevice();
             cleanupDebugUtils();
             cleanupSurface();
@@ -742,8 +766,7 @@ void zh::Vulkan::cleanupSwapchain()
 
 void zh::Vulkan::cleanupVertexBuffer()
 {
-    vkDestroyBuffer(device, vertexBuffer, nullptr);
-    vkFreeMemory(device, vertexBufferMemory, nullptr);
+    vmaDestroyBuffer(allocator, vertexBuffer, vertexBufferMemory);
 }
 
 void zh::Vulkan::cleanupPipeline()
@@ -767,9 +790,15 @@ void zh::Vulkan::cleanupSyncObjects()
     }
 }
 
-void zh::Vulkan::cleanupCommandPool()
+void zh::Vulkan::cleanupCommandPools()
 {
     vkDestroyCommandPool(device, commandPool, nullptr);
+    vkDestroyCommandPool(device, transientCommandPool, nullptr);
+}
+
+void zh::Vulkan::cleanupMemoryAllocator()
+{
+    vmaDestroyAllocator(allocator);
 }
 
 void zh::Vulkan::cleanupDevice()
@@ -856,7 +885,6 @@ const zh::QueueFamilyIndices zh::Vulkan::findQueueFamilies(VkPhysicalDevice devi
 
     for (int i = 0; i < queue_families.size(); ++i)
     {
-        // Require VK_QUEUE_GRAPHICS_BIT
         if (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
             indices.graphicsFamily = i;
 
@@ -1030,19 +1058,58 @@ std::vector<const char *> zh::Vulkan::getRequiredExtensions()
     return extensions;
 }
 
-const uint32_t zh::Vulkan::findMemoryType(const uint32_t type_filter, VkMemoryPropertyFlags properties)
+void zh::Vulkan::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
+                              VmaMemoryUsage memory_usage, VmaAllocationCreateFlags allocation_flags, VkBuffer &buffer,
+                              VmaAllocation &buffer_memory)
 {
-    VkPhysicalDeviceMemoryProperties mem_properties{};
-    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &mem_properties);
+    VkBufferCreateInfo create_info{};
+    create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    create_info.size = size;
+    create_info.usage = usage;
+    create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    for (uint32_t i = 0; i < mem_properties.memoryTypeCount; ++i)
-    {
-        if (type_filter & (1 << i) && (mem_properties.memoryTypes[i].propertyFlags & properties) == properties)
-            return i;
-    }
+    VmaAllocationCreateInfo alloc_info{};
+    alloc_info.usage = memory_usage;
+    alloc_info.flags = allocation_flags;
+    alloc_info.requiredFlags = properties;
 
-    throw std::runtime_error("Failed to find suitable GPU memory type.");
-    return 0;
+    vmaCreateBuffer(allocator, &create_info, &alloc_info, &buffer, &buffer_memory, nullptr);
+}
+
+void zh::Vulkan::copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size)
+{
+    VkCommandBufferAllocateInfo alloc_info{};
+    alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    alloc_info.commandPool = transientCommandPool;
+    alloc_info.commandBufferCount = 1;
+
+    VkCommandBuffer command_buffer;
+    vkAllocateCommandBuffers(device, &alloc_info, &command_buffer);
+
+    VkCommandBufferBeginInfo begin_info{};
+    begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    vkBeginCommandBuffer(command_buffer, &begin_info);
+
+    VkBufferCopy copy_region{};
+    copy_region.srcOffset = 0;
+    copy_region.dstOffset = 0;
+    copy_region.size = size;
+    vkCmdCopyBuffer(command_buffer, src, dst, 1, &copy_region);
+
+    vkEndCommandBuffer(command_buffer);
+
+    VkSubmitInfo submit_info{};
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &command_buffer;
+
+    vkQueueSubmit(graphicsQueue, 1, &submit_info, VK_NULL_HANDLE);
+    vkQueueWaitIdle(graphicsQueue);
+
+    vkFreeCommandBuffers(device, transientCommandPool, 1, &command_buffer);
 }
 
 void zh::Vulkan::recordCommandBuffer(VkCommandBuffer command_buffer, const uint32_t image_index)
