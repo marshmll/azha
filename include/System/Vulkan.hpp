@@ -2,6 +2,8 @@
 
 #include "Graphics/Window.hpp"
 
+constexpr int MAX_FRAMES_IN_FLIGHT = 2;
+
 namespace zh
 {
 struct QueueFamilyIndices
@@ -11,9 +13,9 @@ struct QueueFamilyIndices
 
     inline const bool isComplete() const { return this->graphicsFamily.has_value() && this->presentFamily.has_value(); }
 
-    inline const uint32_t getGraphicsFamily() const { return this->graphicsFamily.value_or(0); }
+    inline const uint32_t getGraphicsFamily() const { return this->graphicsFamily.value(); }
 
-    inline const uint32_t getPresentFamily() const { return this->presentFamily.value_or(0); }
+    inline const uint32_t getPresentFamily() const { return this->presentFamily.value(); }
 };
 
 struct SwapchainSupportDetails
@@ -38,6 +40,8 @@ class Vulkan
 
     void drawFrameTemp();
 
+    void setFramebufferResized(const bool resized);
+
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /// PUBLIC STATIC METHODS ///////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -49,41 +53,48 @@ class Vulkan
     /// PRIVATE ATTRIBUTES //////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    std::vector<const char *> validationLayers;
-    std::vector<const char *> deviceExtensions;
+    // clang-format off
 
-    VkInstance vkInstance;
-    VkDebugUtilsMessengerEXT debugMessenger;
+    std::vector<const char *>       validationLayers;
+    std::vector<const char *>       deviceExtensions;
 
-    VkPhysicalDevice physicalDevice;
-    VkDevice device;
+    VkInstance                      vkInstance;
+    VkDebugUtilsMessengerEXT        debugMessenger;
 
-    GLFWwindow *window;
-    VkSurfaceKHR surface;
+    VkPhysicalDevice                physicalDevice;
+    VkDevice                        device;
 
-    VkQueue graphicsQueue;
-    VkQueue presentQueue;
+    GLFWwindow                      *window;
+    VkSurfaceKHR                    surface;
 
-    VkSwapchainKHR swapchain;
-    VkFormat swapchainImageFormat;
-    VkExtent2D swapchainExtent;
-    std::vector<VkImage> swapchainImages;
-    std::vector<VkImageView> swapchainImageViews;
-    std::vector<VkFramebuffer> swapchainFramebuffers;
+    VkQueue                         graphicsQueue;
+    VkQueue                         presentQueue;
 
-    VkRenderPass renderPass;
-    VkPipelineLayout pipelineLayout;
-    VkPipeline graphicsPipeline;
+    VkSwapchainKHR                  swapchain;
+    VkFormat                        swapchainImageFormat;
+    VkExtent2D                      swapchainExtent;
+    std::vector<VkImage>            swapchainImages;
+    std::vector<VkImageView>        swapchainImageViews;
+    std::vector<VkFramebuffer>      swapchainFramebuffers;
 
-    VkCommandPool commandPool;
-    VkCommandBuffer commandBuffer;
+    VkRenderPass                    renderPass;
+    VkPipelineLayout                pipelineLayout;
+    VkPipeline                      graphicsPipeline;
 
-    VkSemaphore imageAvailableSemaphore;
-    VkSemaphore renderFinishedSemaphore;
-    VkFence inFlightFence;
+    VkCommandPool                   commandPool;
+    std::vector<VkCommandBuffer>    commandBuffers;
 
-    bool enableValidationLayers;
-    bool cleaned;
+    std::vector<VkSemaphore>        imageAvailableSemaphores;
+    std::vector<VkSemaphore>        renderFinishedSemaphores;
+    std::vector<VkFence>            inFlightFences;
+
+    uint32_t                        currentFrame;
+
+    bool                            framebufferResized;
+    bool                            enableValidationLayers;
+    bool                            cleaned;
+
+    // clang-format on
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /// PRIVATE METHODS /////////////////////////////////////////////////////////////////////////////////////////
@@ -115,11 +126,33 @@ class Vulkan
 
     void createCommandPool();
 
-    void createCommandBuffer();
+    void createCommandBuffers();
 
     void createSyncObjects();
 
+    void recreateSwapchain();
+
     void cleanup();
+
+    void cleanupSwapchain();
+
+    void cleanupPipeline();
+
+    void cleanupRenderPass();
+
+    void cleanupSyncObjects();
+
+    void cleanupCommandPool();
+
+    void cleanupDevice();
+
+    void cleanupDebugUtils();
+
+    void cleanupSurface();
+
+    void cleanupWindow();
+
+    void cleanupVulkanInstance();
 
     const int rateDeviceSuitability(VkPhysicalDevice device) const;
 
@@ -163,5 +196,7 @@ class Vulkan
 
     static void destroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
                                               const VkAllocationCallbacks *pAllocator);
+
+    static void framebufferResizedCallback(GLFWwindow *window, int width, int height);
 };
 } // namespace zh
