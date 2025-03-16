@@ -19,36 +19,6 @@ zh::Vulkan::~Vulkan()
     cleanup();
 }
 
-void zh::Vulkan::cleanup()
-{
-    if (!cleaned)
-    {
-        if (enableValidationLayers)
-            destroyDebugUtilsMessengerEXT(vkInstance, debugMessenger, nullptr);
-
-        if (device != VK_NULL_HANDLE)
-        {
-            for (auto &framebuffer : swapchainFramebuffers)
-                vkDestroyFramebuffer(device, framebuffer, nullptr);
-
-            for (auto &view : swapchainImageViews)
-                vkDestroyImageView(device, view, nullptr);
-
-            vkDestroyPipeline(device, graphicsPipeline, nullptr);
-            vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-            vkDestroyRenderPass(device, renderPass, nullptr);
-            vkDestroySwapchainKHR(device, swapchain, nullptr);
-            vkDestroySurfaceKHR(vkInstance, surface, nullptr);
-            glfwDestroyWindow(window);
-            vkDestroyDevice(device, nullptr);
-        }
-
-        vkDestroyInstance(vkInstance, nullptr);
-        glfwTerminate();
-        cleaned = true;
-    }
-}
-
 zh::Window zh::Vulkan::createWindow(const unsigned int width, const unsigned int height, const std::string &title)
 {
     if (window != nullptr)
@@ -69,8 +39,55 @@ zh::Window zh::Vulkan::createWindow(const unsigned int width, const unsigned int
     createRenderPass();
     createGraphicsPipeline();
     createFramebuffers();
+    createCommandPool();
+    createCommandBuffer();
+    createSyncObjects();
 
     return Window(window, surface);
+}
+
+void zh::Vulkan::drawFrameTemp()
+{
+    // Wait for frame to finish
+    vkWaitForFences(device, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
+    vkResetFences(device, 1, &inFlightFence);
+
+    // Acquire an image from the swapchain
+    uint32_t image_index = 0;
+    vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &image_index);
+
+    // Record command buffer
+    vkResetCommandBuffer(commandBuffer, 0);
+    recordCommandBuffer(commandBuffer, image_index);
+
+    // Submit command buffer
+    VkSemaphore wait_semaphores[] = {imageAvailableSemaphore};
+    VkSemaphore signal_semaphores[] = {renderFinishedSemaphore};
+    VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    VkSubmitInfo submit_info{};
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_info.waitSemaphoreCount = 1;
+    submit_info.pWaitSemaphores = wait_semaphores;
+    submit_info.pWaitDstStageMask = wait_stages;
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &commandBuffer;
+    submit_info.signalSemaphoreCount = 1;
+    submit_info.pSignalSemaphores = signal_semaphores;
+
+    if (vkQueueSubmit(graphicsQueue, 1, &submit_info, inFlightFence) != VK_SUCCESS)
+        throw std::runtime_error("Failed to submit draw command buffer.");
+
+    VkSwapchainKHR swapchains[] = {swapchain};
+    VkPresentInfoKHR present_info{};
+    present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    present_info.waitSemaphoreCount = 1;
+    present_info.pWaitSemaphores = signal_semaphores;
+    present_info.swapchainCount = 1;
+    present_info.pSwapchains = swapchains;
+    present_info.pImageIndices = &image_index;
+    present_info.pResults = nullptr;
+
+    vkQueuePresentKHR(presentQueue, &present_info);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -179,9 +196,7 @@ void zh::Vulkan::pickPhysicalDevice()
     vkEnumeratePhysicalDevices(vkInstance, &device_count, nullptr);
 
     if (device_count == 0)
-    {
         throw std::runtime_error("No GPU's with Vulkan support found.");
-    }
 
     std::vector<VkPhysicalDevice> devices(device_count);
     vkEnumeratePhysicalDevices(vkInstance, &device_count, devices.data());
@@ -250,7 +265,7 @@ void zh::Vulkan::createLogicalDevice()
 
 void zh::Vulkan::createSwapchain()
 {
-    SwapChainSupportDetails swap_chain_support = querySwapChainSupport(physicalDevice);
+    SwapchainSupportDetails swap_chain_support = querySwapchainSupport(physicalDevice);
     VkSurfaceFormatKHR format = chooseSwapSurfaceFormat(swap_chain_support.formats);
     VkPresentModeKHR mode = chooseSwapPresentMode(swap_chain_support.presentModes);
     VkExtent2D extent = chooseSwapExtent(swap_chain_support.capabilities);
@@ -354,12 +369,22 @@ void zh::Vulkan::createRenderPass()
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &color_attachment_reference;
 
+    VkSubpassDependency dependency{};
+    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependency.dstSubpass = 0;
+    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcAccessMask = 0;
+    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
     VkRenderPassCreateInfo render_pass_info{};
     render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     render_pass_info.attachmentCount = 1;
     render_pass_info.pAttachments = &color_attachment;
     render_pass_info.subpassCount = 1;
     render_pass_info.pSubpasses = &subpass;
+    render_pass_info.dependencyCount = 1;
+    render_pass_info.pDependencies = &dependency;
 
     if (vkCreateRenderPass(device, &render_pass_info, nullptr, &renderPass) != VK_SUCCESS)
         throw std::runtime_error("Failed to create a Render Pass.");
@@ -533,7 +558,88 @@ void zh::Vulkan::createFramebuffers()
         create_info.layers = 1;
 
         if (vkCreateFramebuffer(device, &create_info, nullptr, &swapchainFramebuffers[i]) != VK_SUCCESS)
-            throw std::runtime_error("Failed to create a framebuffer.");
+            throw std::runtime_error("Failed to create a Framebuffer.");
+    }
+}
+
+void zh::Vulkan::createCommandPool()
+{
+    QueueFamilyIndices queue_family_indices = findQueueFamilies(physicalDevice);
+
+    VkCommandPoolCreateInfo create_info{};
+    create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    create_info.queueFamilyIndex = queue_family_indices.getGraphicsFamily();
+
+    if (vkCreateCommandPool(device, &create_info, nullptr, &commandPool) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create a Command Pool.");
+}
+
+void zh::Vulkan::createCommandBuffer()
+{
+    VkCommandBufferAllocateInfo allocate_info{};
+    allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocate_info.commandPool = commandPool;
+    allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocate_info.commandBufferCount = 1;
+
+    if (vkAllocateCommandBuffers(device, &allocate_info, &commandBuffer) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create a Command Buffer.");
+}
+
+void zh::Vulkan::createSyncObjects()
+{
+    VkSemaphoreCreateInfo semaphore_info{};
+    semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    VkFenceCreateInfo fence_info{};
+    fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+    if (vkCreateSemaphore(device, &semaphore_info, nullptr, &imageAvailableSemaphore) != VK_SUCCESS ||
+        vkCreateSemaphore(device, &semaphore_info, nullptr, &renderFinishedSemaphore) != VK_SUCCESS ||
+        vkCreateFence(device, &fence_info, nullptr, &inFlightFence))
+    {
+        throw std::runtime_error("Failed to create Sync Objects.");
+    }
+}
+
+void zh::Vulkan::cleanup()
+{
+    if (!cleaned)
+    {
+        if (enableValidationLayers)
+            destroyDebugUtilsMessengerEXT(vkInstance, debugMessenger, nullptr);
+
+        if (device != VK_NULL_HANDLE)
+        {
+            vkDeviceWaitIdle(device);
+            vkQueueWaitIdle(presentQueue);
+            vkQueueWaitIdle(graphicsQueue);
+
+            vkDestroySemaphore(device, imageAvailableSemaphore, nullptr);
+            vkDestroySemaphore(device, renderFinishedSemaphore, nullptr);
+            vkDestroyFence(device, inFlightFence, nullptr);
+            vkDestroyCommandPool(device, commandPool, nullptr);
+
+            for (auto &framebuffer : swapchainFramebuffers)
+                vkDestroyFramebuffer(device, framebuffer, nullptr);
+
+            for (auto &view : swapchainImageViews)
+                vkDestroyImageView(device, view, nullptr);
+
+            vkDestroyPipeline(device, graphicsPipeline, nullptr);
+            vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+            vkDestroyRenderPass(device, renderPass, nullptr);
+            vkDestroySwapchainKHR(device, swapchain, nullptr);
+            vkDestroySurfaceKHR(vkInstance, surface, nullptr);
+            glfwDestroyWindow(window);
+            vkDestroyDevice(device, nullptr);
+        }
+
+        vkDestroyInstance(vkInstance, nullptr);
+        glfwTerminate();
+        cleaned = true;
     }
 }
 
@@ -571,7 +677,7 @@ const int zh::Vulkan::rateDeviceSuitability(VkPhysicalDevice device) const
     // Require that swap chain is adequate
     if (extension_support)
     {
-        SwapChainSupportDetails details = querySwapChainSupport(device);
+        SwapchainSupportDetails details = querySwapchainSupport(device);
         if (details.formats.empty() || details.presentModes.empty())
             score = -1;
     }
@@ -612,9 +718,9 @@ const zh::QueueFamilyIndices zh::Vulkan::findQueueFamilies(VkPhysicalDevice devi
     return indices;
 }
 
-const zh::SwapChainSupportDetails zh::Vulkan::querySwapChainSupport(VkPhysicalDevice device) const
+const zh::SwapchainSupportDetails zh::Vulkan::querySwapchainSupport(VkPhysicalDevice device) const
 {
-    SwapChainSupportDetails details;
+    SwapchainSupportDetails details;
 
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
 
@@ -769,6 +875,51 @@ std::vector<const char *> zh::Vulkan::getRequiredExtensions()
     return extensions;
 }
 
+void zh::Vulkan::recordCommandBuffer(VkCommandBuffer command_buffer, const uint32_t image_index)
+{
+    VkCommandBufferBeginInfo begin_info{};
+    begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    begin_info.flags = 0;
+    begin_info.pInheritanceInfo = nullptr;
+
+    if (vkBeginCommandBuffer(command_buffer, &begin_info) != VK_SUCCESS)
+        throw std::runtime_error("Failed to begin recording a Command Buffer.");
+
+    VkClearValue clear_color = {{{0.f, 0.f, 0.f, 1.f}}};
+    VkRenderPassBeginInfo render_pass_info{};
+    render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    render_pass_info.renderPass = renderPass;
+    render_pass_info.framebuffer = swapchainFramebuffers[image_index];
+    render_pass_info.renderArea.offset = {0, 0};
+    render_pass_info.renderArea.extent = swapchainExtent;
+    render_pass_info.clearValueCount = 1;
+    render_pass_info.pClearValues = &clear_color;
+
+    vkCmdBeginRenderPass(command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
+    VkViewport viewport{};
+    viewport.x = 0;
+    viewport.y = 0;
+    viewport.width = static_cast<float>(swapchainExtent.width);
+    viewport.height = static_cast<float>(swapchainExtent.height);
+    viewport.minDepth = 0.f;
+    viewport.maxDepth = 1.f;
+    vkCmdSetViewport(command_buffer, 0, 1, &viewport);
+
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = swapchainExtent;
+    vkCmdSetScissor(command_buffer, 0, 1, &scissor);
+
+    vkCmdDraw(command_buffer, 3, 1, 0, 0);
+
+    vkCmdEndRenderPass(command_buffer);
+
+    if (vkEndCommandBuffer(command_buffer) != VK_SUCCESS)
+        throw std::runtime_error("Failed to record Command Buffer.");
+}
+
 std::vector<char> zh::Vulkan::readFile(const std::string &filename)
 {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
@@ -796,16 +947,16 @@ VKAPI_ATTR VkBool32 VKAPI_CALL zh::Vulkan::debugCallback(VkDebugUtilsMessageSeve
                                                          void *pUserData)
 {
     if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
-        std::cout << "[ DIAL ] (Validation Layer) " << pCallbackData->pMessage << std::endl;
+        std::cout << "[ VL DIAL ] " << pCallbackData->pMessage << std::endl;
 
     else if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
-        std::cout << "[ INFO ] (Validation Layer) " << pCallbackData->pMessage << std::endl;
+        std::cout << "[ VL INFO ] " << pCallbackData->pMessage << std::endl;
 
     else if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
-        std::cout << "[ WARN ] (Validation Layer) " << pCallbackData->pMessage << std::endl;
+        std::cout << "[ VL WARN ] " << pCallbackData->pMessage << std::endl;
 
     else if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
-        std::cerr << "[ ERROR ] (Validation Layer) " << pCallbackData->pMessage << std::endl;
+        std::cerr << "[ VL ERROR ] " << pCallbackData->pMessage << std::endl;
 
     return VK_FALSE;
 }

@@ -16,7 +16,7 @@ struct QueueFamilyIndices
     inline const uint32_t getPresentFamily() const { return this->presentFamily.value_or(0); }
 };
 
-struct SwapChainSupportDetails
+struct SwapchainSupportDetails
 {
     VkSurfaceCapabilitiesKHR capabilities;
     std::vector<VkSurfaceFormatKHR> formats;
@@ -34,9 +34,9 @@ class Vulkan
 
     ~Vulkan();
 
-    void cleanup();
-
     Window createWindow(const unsigned int width, const unsigned int height, const std::string &title);
+
+    void drawFrameTemp();
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /// PUBLIC STATIC METHODS ///////////////////////////////////////////////////////////////////////////////////
@@ -73,8 +73,14 @@ class Vulkan
 
     VkRenderPass renderPass;
     VkPipelineLayout pipelineLayout;
-
     VkPipeline graphicsPipeline;
+
+    VkCommandPool commandPool;
+    VkCommandBuffer commandBuffer;
+
+    VkSemaphore imageAvailableSemaphore;
+    VkSemaphore renderFinishedSemaphore;
+    VkFence inFlightFence;
 
     bool enableValidationLayers;
     bool cleaned;
@@ -107,11 +113,19 @@ class Vulkan
 
     void createFramebuffers();
 
+    void createCommandPool();
+
+    void createCommandBuffer();
+
+    void createSyncObjects();
+
+    void cleanup();
+
     const int rateDeviceSuitability(VkPhysicalDevice device) const;
 
     const QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) const;
 
-    const SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) const;
+    const SwapchainSupportDetails querySwapchainSupport(VkPhysicalDevice device) const;
 
     VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &available_formats);
 
@@ -128,6 +142,8 @@ class Vulkan
     VkShaderModule createShaderModule(std::vector<char> &code);
 
     std::vector<const char *> getRequiredExtensions();
+
+    void recordCommandBuffer(VkCommandBuffer command_buffer, const uint32_t image_index);
 
     std::vector<char> readFile(const std::string &filename);
 

@@ -7,11 +7,12 @@ int main()
 
     zh::Window window = vulkan.createWindow(846, 484, "Vulkan");
 
-    do
+    while (!window.shouldClose())
     {
         window.pollEvents();
-    } while (!window.shouldClose());
 
+        vulkan.drawFrameTemp();
+    }
 
     return 0;
 }
