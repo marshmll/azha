@@ -1,8 +1,19 @@
 #pragma once
 
 #include "Graphics/Window.hpp"
+#include "Graphics/Vertex.hpp"
 
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
+
+// clang-format off
+
+const Vertex vertices[] = {
+    {{0.0f, -0.5f}, {1.0f, 1.0f, 1.0f, 1.0f}},
+    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f, 1.0f}}
+};
+
+// clang-format on
 
 namespace zh
 {
@@ -87,8 +98,10 @@ class Vulkan
     std::vector<VkSemaphore>        imageAvailableSemaphores;
     std::vector<VkSemaphore>        renderFinishedSemaphores;
     std::vector<VkFence>            inFlightFences;
-
     uint32_t                        currentFrame;
+
+    VkBuffer                        vertexBuffer;
+    VkDeviceMemory                  vertexBufferMemory;
 
     bool                            framebufferResized;
     bool                            enableValidationLayers;
@@ -126,6 +139,8 @@ class Vulkan
 
     void createCommandPool();
 
+    void createVertexBuffer();
+
     void createCommandBuffers();
 
     void createSyncObjects();
@@ -135,6 +150,8 @@ class Vulkan
     void cleanup();
 
     void cleanupSwapchain();
+
+    void cleanupVertexBuffer();
 
     void cleanupPipeline();
 
@@ -175,6 +192,8 @@ class Vulkan
     VkShaderModule createShaderModule(std::vector<char> &code);
 
     std::vector<const char *> getRequiredExtensions();
+
+    const uint32_t findMemoryType(const uint32_t type_filter, VkMemoryPropertyFlags properties);
 
     void recordCommandBuffer(VkCommandBuffer command_buffer, const uint32_t image_index);
 

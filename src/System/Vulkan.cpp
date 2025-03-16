@@ -42,6 +42,7 @@ zh::Window zh::Vulkan::createWindow(const unsigned int width, const unsigned int
     createGraphicsPipeline();
     createFramebuffers();
     createCommandPool();
+    createVertexBuffer();
     createCommandBuffers();
     createSyncObjects();
 
@@ -462,12 +463,15 @@ void zh::Vulkan::createGraphicsPipeline()
     dynamic_state_info.pDynamicStates = dynamic_states.data();
 
     // Vertex Input State
+    auto binding_description = Vertex::getBindingDescription();
+    auto attribute_descriptions = Vertex::getAttributeDescriptions();
+
     VkPipelineVertexInputStateCreateInfo vertex_input_state_info{};
     vertex_input_state_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertex_input_state_info.vertexBindingDescriptionCount = 0;
-    vertex_input_state_info.pVertexBindingDescriptions = nullptr;
-    vertex_input_state_info.vertexAttributeDescriptionCount = 0;
-    vertex_input_state_info.pVertexAttributeDescriptions = nullptr;
+    vertex_input_state_info.vertexBindingDescriptionCount = 1;
+    vertex_input_state_info.pVertexBindingDescriptions = &binding_description;
+    vertex_input_state_info.vertexAttributeDescriptionCount = static_cast<uint32_t>(attribute_descriptions.size());
+    vertex_input_state_info.pVertexAttributeDescriptions = attribute_descriptions.data();
 
     // Input Assembly State
     VkPipelineInputAssemblyStateCreateInfo input_assembly_state{};
@@ -607,6 +611,38 @@ void zh::Vulkan::createCommandPool()
         throw std::runtime_error("Failed to create a Command Pool.");
 }
 
+void zh::Vulkan::createVertexBuffer()
+{
+    VkBufferCreateInfo create_info{};
+    create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    create_info.size = sizeof(vertices);
+    create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    create_info.flags = 0;
+
+    if (vkCreateBuffer(device, &create_info, nullptr, &vertexBuffer) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create a Vertex Buffer.");
+
+    VkMemoryRequirements mem_requirements{};
+    vkGetBufferMemoryRequirements(device, vertexBuffer, &mem_requirements);
+
+    VkMemoryAllocateInfo alloc_info{};
+    alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    alloc_info.allocationSize = mem_requirements.size;
+    alloc_info.memoryTypeIndex = findMemoryType(
+        mem_requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    if (vkAllocateMemory(device, &alloc_info, nullptr, &vertexBufferMemory) != VK_SUCCESS)
+        throw std::runtime_error("Failed to allocate Vertex Buffer Memory.");
+
+    vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory, 0);
+
+    void *data;
+    vkMapMemory(device, vertexBufferMemory, 0, create_info.size, 0, &data);
+    std::memcpy(data, vertices, static_cast<size_t>(create_info.size));
+    vkUnmapMemory(device, vertexBufferMemory);
+}
+
 void zh::Vulkan::createCommandBuffers()
 {
     commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
@@ -675,6 +711,7 @@ void zh::Vulkan::cleanup()
             vkDeviceWaitIdle(device);
 
             cleanupSwapchain();
+            cleanupVertexBuffer();
             cleanupPipeline();
             cleanupRenderPass();
             cleanupSyncObjects();
@@ -701,6 +738,12 @@ void zh::Vulkan::cleanupSwapchain()
         vkDestroyImageView(device, view, nullptr);
 
     vkDestroySwapchainKHR(device, swapchain, nullptr);
+}
+
+void zh::Vulkan::cleanupVertexBuffer()
+{
+    vkDestroyBuffer(device, vertexBuffer, nullptr);
+    vkFreeMemory(device, vertexBufferMemory, nullptr);
 }
 
 void zh::Vulkan::cleanupPipeline()
@@ -987,6 +1030,21 @@ std::vector<const char *> zh::Vulkan::getRequiredExtensions()
     return extensions;
 }
 
+const uint32_t zh::Vulkan::findMemoryType(const uint32_t type_filter, VkMemoryPropertyFlags properties)
+{
+    VkPhysicalDeviceMemoryProperties mem_properties{};
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &mem_properties);
+
+    for (uint32_t i = 0; i < mem_properties.memoryTypeCount; ++i)
+    {
+        if (type_filter & (1 << i) && (mem_properties.memoryTypes[i].propertyFlags & properties) == properties)
+            return i;
+    }
+
+    throw std::runtime_error("Failed to find suitable GPU memory type.");
+    return 0;
+}
+
 void zh::Vulkan::recordCommandBuffer(VkCommandBuffer command_buffer, const uint32_t image_index)
 {
     VkCommandBufferBeginInfo begin_info{};
@@ -1024,7 +1082,11 @@ void zh::Vulkan::recordCommandBuffer(VkCommandBuffer command_buffer, const uint3
     scissor.extent = swapchainExtent;
     vkCmdSetScissor(command_buffer, 0, 1, &scissor);
 
-    vkCmdDraw(command_buffer, 3, 1, 0, 0);
+    VkBuffer vertexBuffers[] = {vertexBuffer};
+    VkDeviceSize offsets[] = {0};
+    vkCmdBindVertexBuffers(command_buffer, 0, 1, vertexBuffers, offsets);
+
+    vkCmdDraw(command_buffer, static_cast<uint32_t>(sizeof(vertices) / sizeof(Vertex)), 1, 0, 0);
 
     vkCmdEndRenderPass(command_buffer);
 
