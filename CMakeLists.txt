@@ -21,6 +21,8 @@ add_custom_target(copy_assets
     COMMENT "Copying Assets folder"
 )
 
+add_compile_options(-Wno-nullability-completeness)
+
 add_dependencies(azha copy_assets)
 
 install(TARGETS azha)

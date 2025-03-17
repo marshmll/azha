@@ -6,16 +6,20 @@
 
 #include "Graphics/Window.hpp"
 #include "Graphics/Vertex.hpp"
+#include "Graphics/UniformBufferObject.hpp"
 
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
 // clang-format off
 
 const Vertex vertices[] = {
-    {{0.0f, -0.5f}, {1.0f, 1.0f, 1.0f, 1.0f}},
-    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f, 1.0f}}
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f, 1.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f, 1.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f, 1.0f}},
 };
+
+const uint32_t indices[] = {0, 1, 2, 2, 3, 0};
 
 // clang-format on
 
@@ -95,6 +99,7 @@ class Vulkan
     std::vector<VkFramebuffer>      swapchainFramebuffers;
 
     VkRenderPass                    renderPass;
+    VkDescriptorSetLayout           descriptorSetLayout;
     VkPipelineLayout                pipelineLayout;
     VkPipeline                      graphicsPipeline;
 
@@ -109,6 +114,15 @@ class Vulkan
 
     VkBuffer                        vertexBuffer;
     VmaAllocation                   vertexBufferMemory;
+    VkBuffer                        indexBuffer;
+    VmaAllocation                   indexBufferMemory;
+
+    std::vector<VkBuffer>           uniformBuffers;
+    std::vector<VmaAllocation>      uniformBuffersMemory;
+    std::vector<void *>             uniformBuffersMapped;
+
+    VkDescriptorPool                descriptorPool;
+    std::vector<VkDescriptorSet>    descriptorSets;
 
     bool                            framebufferResized;
     bool                            enableValidationLayers;
@@ -142,6 +156,8 @@ class Vulkan
 
     void createRenderPass();
 
+    void createDescriptorSetLayout();
+
     void createGraphicsPipeline();
 
     void createFramebuffers();
@@ -150,11 +166,21 @@ class Vulkan
 
     void createVertexBuffer();
 
+    void createIndexBuffer();
+
+    void createUniformBuffers();
+
+    void createDescriptorPool();
+
+    void createDescriptorSets();
+
     void createCommandBuffers();
 
     void createSyncObjects();
 
     void recreateSwapchain();
+
+    void updateUniformBuffer(const uint32_t current_image);
 
     void cleanup();
 
@@ -162,7 +188,15 @@ class Vulkan
 
     void cleanupSwapchain();
 
+    void cleanupIndexBuffer();
+
     void cleanupVertexBuffer();
+
+    void cleanupUniformBuffers();
+
+    void cleanupDescriptorPool();
+
+    void cleanupDescriptorSetLayout();
 
     void cleanupPipeline();
 
@@ -207,6 +241,8 @@ class Vulkan
     void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
                       VmaMemoryUsage memory_usage, VmaAllocationCreateFlags allocation_flags, VkBuffer &buffer,
                       VmaAllocation &buffer_memory);
+
+    void createStagingBuffer(VkDeviceSize buffer_size, VkBuffer &buffer, VmaAllocation &buffer_memory);
 
     void copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size);
 

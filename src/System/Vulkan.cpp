@@ -40,10 +40,15 @@ zh::Window zh::Vulkan::createWindow(const unsigned int width, const unsigned int
     createSwapchain();
     createImageViews();
     createRenderPass();
+    createDescriptorSetLayout();
     createGraphicsPipeline();
     createFramebuffers();
     createCommandPools();
     createVertexBuffer();
+    createIndexBuffer();
+    createUniformBuffers();
+    createDescriptorPool();
+    createDescriptorSets();
     createCommandBuffers();
     createSyncObjects();
 
@@ -76,6 +81,8 @@ void zh::Vulkan::drawFrameTemp()
     // Record command buffer
     vkResetCommandBuffer(commandBuffers[currentFrame], 0);
     recordCommandBuffer(commandBuffers[currentFrame], image_index);
+
+    updateUniformBuffer(currentFrame);
 
     // Submit command buffer
     VkSemaphore wait_semaphores[] = {imageAvailableSemaphores[currentFrame]};
@@ -153,7 +160,7 @@ void zh::Vulkan::initValidationLayers()
 
 void zh::Vulkan::initDeviceExtensions()
 {
-    deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME};
 }
 
 void zh::Vulkan::initGLFW()
@@ -442,6 +449,24 @@ void zh::Vulkan::createRenderPass()
         throw std::runtime_error("Failed to create a Render Pass.");
 }
 
+void zh::Vulkan::createDescriptorSetLayout()
+{
+    VkDescriptorSetLayoutBinding ubo_layout_binding{};
+    ubo_layout_binding.binding = 0;
+    ubo_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    ubo_layout_binding.descriptorCount = 1;
+    ubo_layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    ubo_layout_binding.pImmutableSamplers = nullptr;
+
+    VkDescriptorSetLayoutCreateInfo create_info{};
+    create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    create_info.bindingCount = 1;
+    create_info.pBindings = &ubo_layout_binding;
+
+    if (vkCreateDescriptorSetLayout(device, &create_info, nullptr, &descriptorSetLayout) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create descriptor set layout.");
+}
+
 void zh::Vulkan::createGraphicsPipeline()
 {
     VkShaderModule vert_shader_module;
@@ -512,7 +537,7 @@ void zh::Vulkan::createGraphicsPipeline()
     rasterization_state_info.polygonMode = VK_POLYGON_MODE_FILL;
     rasterization_state_info.lineWidth = 1.f;
     rasterization_state_info.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterization_state_info.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterization_state_info.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterization_state_info.depthBiasEnable = VK_FALSE;
     rasterization_state_info.depthBiasConstantFactor = 0.f;
     rasterization_state_info.depthBiasClamp = 0.f;
@@ -556,8 +581,8 @@ void zh::Vulkan::createGraphicsPipeline()
     // Pipeline Layout
     VkPipelineLayoutCreateInfo pipeline_layout_info{};
     pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipeline_layout_info.setLayoutCount = 0;
-    pipeline_layout_info.pSetLayouts = nullptr;
+    pipeline_layout_info.setLayoutCount = 1;
+    pipeline_layout_info.pSetLayouts = &descriptorSetLayout;
     pipeline_layout_info.pushConstantRangeCount = 0;
     pipeline_layout_info.pPushConstantRanges = nullptr;
 
@@ -645,11 +670,7 @@ void zh::Vulkan::createVertexBuffer()
     VkBuffer staging_buffer;
     VmaAllocation staging_buffer_memory;
 
-    createBuffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, VMA_MEMORY_USAGE_CPU_ONLY,
-                 VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
-                     VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-                 staging_buffer, staging_buffer_memory);
+    createStagingBuffer(buffer_size, staging_buffer, staging_buffer_memory);
 
     void *data;
 
@@ -658,12 +679,109 @@ void zh::Vulkan::createVertexBuffer()
     vmaUnmapMemory(allocator, staging_buffer_memory);
 
     createBuffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                 VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, VMA_MEMORY_USAGE_AUTO, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                 vertexBuffer, vertexBufferMemory);
+                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+                 VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT, vertexBuffer, vertexBufferMemory);
 
     copyBuffer(staging_buffer, vertexBuffer, buffer_size);
 
     vmaDestroyBuffer(allocator, staging_buffer, staging_buffer_memory);
+}
+
+void zh::Vulkan::createIndexBuffer()
+{
+    VkDeviceSize buffer_size = sizeof(indices);
+
+    VkBuffer staging_buffer;
+    VmaAllocation staging_buffer_memory;
+
+    createStagingBuffer(buffer_size, staging_buffer, staging_buffer_memory);
+
+    void *data;
+
+    vmaMapMemory(allocator, staging_buffer_memory, &data);
+    std::memcpy(data, indices, static_cast<size_t>(buffer_size));
+    vmaUnmapMemory(allocator, staging_buffer_memory);
+
+    createBuffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+                 VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT, indexBuffer, indexBufferMemory);
+
+    copyBuffer(staging_buffer, indexBuffer, buffer_size);
+
+    vmaDestroyBuffer(allocator, staging_buffer, staging_buffer_memory);
+}
+
+void zh::Vulkan::createUniformBuffers()
+{
+    VkDeviceSize buffer_size = sizeof(UniformBufferObject);
+
+    uniformBuffers.resize(buffer_size);
+    uniformBuffersMemory.resize(buffer_size);
+    uniformBuffersMapped.resize(buffer_size);
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+    {
+        createBuffer(buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+                     VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
+                         VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
+                     uniformBuffers[i], uniformBuffersMemory[i]);
+
+        vmaMapMemory(allocator, uniformBuffersMemory[i], &uniformBuffersMapped[i]);
+    }
+}
+
+void zh::Vulkan::createDescriptorPool()
+{
+    VkDescriptorPoolSize pool_size{};
+    pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    pool_size.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+    VkDescriptorPoolCreateInfo create_info{};
+    create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    create_info.poolSizeCount = 1;
+    create_info.pPoolSizes = &pool_size;
+    create_info.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    create_info.flags = 0;
+
+    if (vkCreateDescriptorPool(device, &create_info, nullptr, &descriptorPool) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create descriptor pool.");
+}
+
+void zh::Vulkan::createDescriptorSets()
+{
+    std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
+    VkDescriptorSetAllocateInfo alloc_info{};
+    alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    alloc_info.descriptorPool = descriptorPool;
+    alloc_info.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    alloc_info.pSetLayouts = layouts.data();
+
+    descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+    if (vkAllocateDescriptorSets(device, &alloc_info, descriptorSets.data()) != VK_SUCCESS)
+        throw std::runtime_error("Failed to allocate descriptor sets.");
+
+    for (size_t i = 0; i < descriptorSets.size(); ++i)
+    {
+        VkDescriptorBufferInfo buffer_info{};
+        buffer_info.buffer = uniformBuffers[i];
+        buffer_info.offset = 0;
+        buffer_info.range = sizeof(UniformBufferObject);
+
+        VkWriteDescriptorSet descriptor_write{};
+        descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptor_write.dstSet = descriptorSets[i];
+        descriptor_write.dstBinding = 0;
+        descriptor_write.dstArrayElement = 0;
+        descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptor_write.descriptorCount = 1;
+        descriptor_write.pBufferInfo = &buffer_info;
+        descriptor_write.pImageInfo = nullptr;
+        descriptor_write.pTexelBufferView = nullptr;
+
+        vkUpdateDescriptorSets(device, 1, &descriptor_write, 0, nullptr);
+    }
 }
 
 void zh::Vulkan::createCommandBuffers()
@@ -725,6 +843,22 @@ void zh::Vulkan::recreateSwapchain()
     createFramebuffers();
 }
 
+void zh::Vulkan::updateUniformBuffer(const uint32_t current_image)
+{
+    static auto start_time = std::chrono::high_resolution_clock::now();
+    auto current_time = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(current_time - start_time).count();
+
+    UniformBufferObject ubo{};
+    ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.proj = glm::perspective(glm::radians(45.0f),
+                                static_cast<float>(swapchainExtent.width) / static_cast<float>(swapchainExtent.height),
+                                0.1f, 10.f);
+    ubo.proj[1][1] *= -1;
+    std::memcpy(uniformBuffersMapped[current_image], &ubo, sizeof(UniformBufferObject));
+}
+
 void zh::Vulkan::cleanup()
 {
     if (!cleaned)
@@ -734,8 +868,12 @@ void zh::Vulkan::cleanup()
             vkDeviceWaitIdle(device);
 
             cleanupSwapchain();
+            cleanupIndexBuffer();
             cleanupVertexBuffer();
+            cleanupUniformBuffers();
             cleanupPipeline();
+            cleanupDescriptorPool();
+            cleanupDescriptorSetLayout();
             cleanupRenderPass();
             cleanupSyncObjects();
             cleanupCommandPools();
@@ -764,9 +902,33 @@ void zh::Vulkan::cleanupSwapchain()
     vkDestroySwapchainKHR(device, swapchain, nullptr);
 }
 
+void zh::Vulkan::cleanupIndexBuffer()
+{
+    vmaDestroyBuffer(allocator, indexBuffer, indexBufferMemory);
+}
+
 void zh::Vulkan::cleanupVertexBuffer()
 {
     vmaDestroyBuffer(allocator, vertexBuffer, vertexBufferMemory);
+}
+
+void zh::Vulkan::cleanupUniformBuffers()
+{
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        vmaUnmapMemory(allocator, uniformBuffersMemory[i]);
+        vmaDestroyBuffer(allocator, uniformBuffers[i], uniformBuffersMemory[i]);
+    }
+}
+
+void zh::Vulkan::cleanupDescriptorPool()
+{
+    vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+}
+
+void zh::Vulkan::cleanupDescriptorSetLayout()
+{
+    vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 }
 
 void zh::Vulkan::cleanupPipeline()
@@ -1055,6 +1217,8 @@ std::vector<const char *> zh::Vulkan::getRequiredExtensions()
     if (enableValidationLayers)
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
+    extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+
     return extensions;
 }
 
@@ -1074,6 +1238,16 @@ void zh::Vulkan::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMem
     alloc_info.requiredFlags = properties;
 
     vmaCreateBuffer(allocator, &create_info, &alloc_info, &buffer, &buffer_memory, nullptr);
+}
+
+void zh::Vulkan::createStagingBuffer(VkDeviceSize buffer_size, VkBuffer &buffer, VmaAllocation &buffer_memory)
+{
+    createBuffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
+                 VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
+                     VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT,
+                 buffer, buffer_memory);
 }
 
 void zh::Vulkan::copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size)
@@ -1151,9 +1325,14 @@ void zh::Vulkan::recordCommandBuffer(VkCommandBuffer command_buffer, const uint3
 
     VkBuffer vertexBuffers[] = {vertexBuffer};
     VkDeviceSize offsets[] = {0};
-    vkCmdBindVertexBuffers(command_buffer, 0, 1, vertexBuffers, offsets);
 
-    vkCmdDraw(command_buffer, static_cast<uint32_t>(sizeof(vertices) / sizeof(Vertex)), 1, 0, 0);
+    vkCmdBindVertexBuffers(command_buffer, 0, 1, vertexBuffers, offsets);
+    vkCmdBindIndexBuffer(command_buffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+    vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1,
+                            &descriptorSets[currentFrame], 0, nullptr);
+
+    vkCmdDrawIndexed(command_buffer, static_cast<uint32_t>(sizeof(indices) / sizeof(uint32_t)), 1, 0, 0, 0);
 
     vkCmdEndRenderPass(command_buffer);
 
