@@ -1,10 +1,8 @@
 #pragma once
 
-#define VMA_STATIC_VULKAN_FUNCTIONS 0
-#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
 #include "vk_mem_alloc.h"
 
-#include "Graphics/Window.hpp"
+#include "System/Window.hpp"
 #include "Graphics/Vertex.hpp"
 #include "Graphics/UniformBufferObject.hpp"
 

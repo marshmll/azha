@@ -10,10 +10,21 @@ zh::Device::Device(Window &window) : window(window)
     pickAdequatePhysicalDevice();
     createLogicalDevice();
     initMemoryAllocator();
+    createVertexBuffer(1);
+    createIndexBuffer(1);
+    createUniformBuffers(1);
 }
 
 zh::Device::~Device()
 {
+    for (size_t i = 0; i < Device::MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        vmaUnmapMemory(allocator, uniformBuffersMemory[i]);
+        vmaDestroyBuffer(allocator, uniformBuffers[i], uniformBuffersMemory[i]);
+    }
+
+    vmaDestroyBuffer(allocator, indexBuffer, indexBufferMemory);
+    vmaDestroyBuffer(allocator, vertexBuffer, vertexBufferMemory);
     vmaDestroyAllocator(allocator);
     vkDestroySurfaceKHR(instance, window.getSurface(), nullptr);
     vkDestroyDevice(device, nullptr);
@@ -59,6 +70,80 @@ const bool zh::Device::checkValidationLayerSupport()
     }
 
     return true;
+}
+
+std::vector<const char *> zh::Device::getRequiredExtensions()
+{
+    uint32_t glfw_extension_count = 0;
+    const char **glfw_extensions;
+
+    glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
+
+    std::vector<const char *> extensions(glfw_extensions, glfw_extensions + glfw_extension_count);
+
+#ifndef NDEBUG
+    extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+#endif
+    extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+
+    return extensions;
+}
+
+const zh::Device::QueueFamilyIndices zh::Device::findQueueFamilies()
+{
+    QueueFamilyIndices indices;
+
+    uint32_t queue_family_count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queue_family_count, nullptr);
+
+    std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queue_family_count, queue_families.data());
+
+    for (int i = 0; i < queue_families.size(); ++i)
+    {
+        if (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+            indices.graphicsFamily = i;
+
+        VkBool32 present_support = false;
+        vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, window.getSurface(), &present_support);
+
+        if (present_support)
+            indices.presentFamily = i;
+
+        if (indices.isComplete())
+            break;
+    }
+
+    return indices;
+}
+
+const zh::Device::SwapchainSupportDetails zh::Device::querySwapchainSupport() const
+{
+    SwapchainSupportDetails details;
+
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, window.getSurface(), &details.capabilities);
+
+    uint32_t format_count = 0;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, window.getSurface(), &format_count, nullptr);
+
+    if (format_count != 0)
+    {
+        details.formats.resize(format_count);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, window.getSurface(), &format_count,
+                                             details.formats.data());
+    }
+
+    uint32_t present_modes_count = 0;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, window.getSurface(), &present_modes_count, nullptr);
+
+    if (present_modes_count != 0)
+    {
+        details.presentModes.resize(format_count);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, window.getSurface(), &present_modes_count,
+                                                  details.presentModes.data());
+    }
+
+    return details;
 }
 
 void zh::Device::nullifyHandles()
@@ -165,7 +250,7 @@ void zh::Device::pickAdequatePhysicalDevice()
 
 void zh::Device::createLogicalDevice()
 {
-    QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+    QueueFamilyIndices indices = findQueueFamilies();
 
     std::vector<VkDeviceQueueCreateInfo> queue_create_infos;
     std::set<uint32_t> unique_queue_families = {indices.getGraphicsFamily(), indices.getPresentFamily()};
@@ -226,77 +311,67 @@ void zh::Device::initMemoryAllocator()
         throw std::runtime_error("zh::Device::initMemoryAllocator: FAILED TO INITIALIZE VMA MEMORY ALLOCATOR");
 }
 
-std::vector<const char *> zh::Device::getRequiredExtensions()
+void zh::Device::createVertexBuffer(VkDeviceSize buffer_size)
 {
-    uint32_t glfw_extension_count = 0;
-    const char **glfw_extensions;
+    VkBuffer staging_buffer;
+    VmaAllocation staging_buffer_memory;
 
-    glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
+    Buffer::stagingBuffer(allocator, buffer_size, staging_buffer, staging_buffer_memory);
 
-    std::vector<const char *> extensions(glfw_extensions, glfw_extensions + glfw_extension_count);
+    // void *data;
 
-#ifndef NDEBUG
-    extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-#endif
-    extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    // vmaMapMemory(allocator, staging_buffer_memory, &data);
+    // std::memcpy(data, vertices, static_cast<size_t>(buffer_size));
+    // vmaUnmapMemory(allocator, staging_buffer_memory);
 
-    return extensions;
+    Buffer::create(allocator, buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+                   VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT, vertexBuffer, vertexBufferMemory);
+
+    // Buffer::copy(device, graphicsQueue, staging_buffer, vertexBuffer, buffer_size);
+
+    vmaDestroyBuffer(allocator, staging_buffer, staging_buffer_memory);
 }
 
-const zh::Device::QueueFamilyIndices zh::Device::findQueueFamilies(VkPhysicalDevice device)
+void zh::Device::createIndexBuffer(VkDeviceSize buffer_size)
 {
-    QueueFamilyIndices indices;
+    VkBuffer staging_buffer;
+    VmaAllocation staging_buffer_memory;
 
-    uint32_t queue_family_count = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nullptr);
+    Buffer::stagingBuffer(allocator, buffer_size, staging_buffer, staging_buffer_memory);
 
-    std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, queue_families.data());
+    void *data;
 
-    for (int i = 0; i < queue_families.size(); ++i)
-    {
-        if (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
-            indices.graphicsFamily = i;
+    // vmaMapMemory(allocator, staging_buffer_memory, &data);
+    // std::memcpy(data, indices, static_cast<size_t>(buffer_size));
+    // vmaUnmapMemory(allocator, staging_buffer_memory);
 
-        VkBool32 present_support = false;
-        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, window.getSurface(), &present_support);
+    Buffer::create(allocator, buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+                   VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT, indexBuffer, indexBufferMemory);
 
-        if (present_support)
-            indices.presentFamily = i;
+    // Buffer::copy(device, graphicsQueue, staging_buffer, indexBuffer, buffer_size);
 
-        if (indices.isComplete())
-            break;
-    }
-
-    return indices;
+    vmaDestroyBuffer(allocator, staging_buffer, staging_buffer_memory);
 }
 
-const zh::Device::SwapchainSupportDetails zh::Device::querySwapchainSupport(VkPhysicalDevice device) const
+void zh::Device::createUniformBuffers(VkDeviceSize buffer_size)
 {
-    SwapchainSupportDetails details;
+    uniformBuffers.resize(buffer_size);
+    uniformBuffersMemory.resize(buffer_size);
+    uniformBuffersMapped.resize(buffer_size);
 
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, window.getSurface(), &details.capabilities);
-
-    uint32_t format_count = 0;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, window.getSurface(), &format_count, nullptr);
-
-    if (format_count != 0)
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
-        details.formats.resize(format_count);
-        vkGetPhysicalDeviceSurfaceFormatsKHR(device, window.getSurface(), &format_count, details.formats.data());
+        Buffer::create(allocator, buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                       VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+                       VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
+                           VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
+                       uniformBuffers[i], uniformBuffersMemory[i]);
+
+        vmaMapMemory(allocator, uniformBuffersMemory[i], &uniformBuffersMapped[i]);
     }
-
-    uint32_t present_modes_count = 0;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, window.getSurface(), &present_modes_count, nullptr);
-
-    if (present_modes_count != 0)
-    {
-        details.presentModes.resize(format_count);
-        vkGetPhysicalDeviceSurfacePresentModesKHR(device, window.getSurface(), &present_modes_count,
-                                                  details.presentModes.data());
-    }
-
-    return details;
 }
 
 void zh::Device::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT &create_info)
@@ -343,13 +418,13 @@ const int zh::Device::rateDeviceSuitability(VkPhysicalDevice physical_device)
         score = -1;
 
     // Require a device with a valid queue familiy.
-    if (!findQueueFamilies(physical_device).isComplete())
+    if (!findQueueFamilies().isComplete())
         score = -1;
 
     // Require that swap chain is adequate
     if (extension_support)
     {
-        SwapchainSupportDetails details = querySwapchainSupport(physical_device);
+        SwapchainSupportDetails details = querySwapchainSupport();
         if (details.formats.empty() || details.presentModes.empty())
             score = -1;
     }

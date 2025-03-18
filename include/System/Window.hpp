@@ -21,6 +21,8 @@ class Window
 
     void createSurface(VkInstance &instance);
 
+    GLFWwindow *&getHandle();
+
     VkSurfaceKHR &getSurface();
 
     const bool getFramebufferResized() const;

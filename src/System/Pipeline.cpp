@@ -1,8 +1,9 @@
 #include "stdafx.hpp"
 #include "System/Pipeline.hpp"
 
-zh::Pipeline::Pipeline(Device &device, const std::string &vertex_shader_path, const std::string &fragment_shader_path)
-    : device(device)
+zh::Pipeline::Pipeline(Device &device, Swapchain &swapchain, const std::string &vertex_shader_path,
+                       const std::string &fragment_shader_path)
+    : device(device), swapchain(swapchain)
 {
     createPipeline(vertex_shader_path, fragment_shader_path);
 }
@@ -137,7 +138,7 @@ void zh::Pipeline::createPipeline(const std::string &vertex_shader_path, const s
     graphics_pipeline_info.pColorBlendState = &color_blending_state;
     graphics_pipeline_info.pDynamicState = &dynamic_state_info;
     graphics_pipeline_info.layout = pipelineLayout;
-    graphics_pipeline_info.renderPass = renderPass;
+    graphics_pipeline_info.renderPass = swapchain.getRenderPass();
     graphics_pipeline_info.subpass = 0;
     graphics_pipeline_info.basePipelineHandle = VK_NULL_HANDLE;
     graphics_pipeline_info.basePipelineIndex = -1;

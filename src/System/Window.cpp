@@ -1,5 +1,5 @@
 #include "stdafx.hpp"
-#include "Graphics/Window.hpp"
+#include "System/Window.hpp"
 
 zh::Window::Window(const unsigned short width, const unsigned short height, const std::string &title)
     : window(nullptr), surface(VK_NULL_HANDLE)
@@ -56,4 +56,9 @@ void zh::Window::framebufferResizedCallback(GLFWwindow *window, int width, int h
 {
     auto pWindow = reinterpret_cast<zh::Window *>(glfwGetWindowUserPointer(window));
     pWindow->setFramebufferResized(true);
+}
+
+GLFWwindow *&zh::Window::getHandle()
+{
+    return window;
 }

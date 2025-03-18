@@ -1,10 +1,7 @@
 #pragma once
 
-#define VMA_STATIC_VULKAN_FUNCTIONS 0
-#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
-#include "vk_mem_alloc.h"
-
-#include "Graphics/Window.hpp"
+#include "System/Buffer.hpp"
+#include "System/Window.hpp"
 
 namespace zh
 {
@@ -14,6 +11,7 @@ class Device
     inline static const std::vector<const char *> VALIDATION_LAYERS = {"VK_LAYER_KHRONOS_validation"};
     inline static const std::vector<const char *> DEVICE_EXTENSIONS = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
                                                                        VK_EXT_MEMORY_BUDGET_EXTENSION_NAME};
+    static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
     struct QueueFamilyIndices
     {
@@ -53,22 +51,46 @@ class Device
 
     const bool checkValidationLayerSupport();
 
+    std::vector<const char *> getRequiredExtensions();
+
+    const QueueFamilyIndices findQueueFamilies();
+
+    const SwapchainSupportDetails querySwapchainSupport() const;
+
   private:
-    std::vector<char *> validationLayers;
-    std::vector<char *> deviceExtensions;
+    // clang-format off
+    std::vector<char *>          validationLayers;
+    std::vector<char *>          deviceExtensions;
 
-    Window &window;
+    Window                       &window;
 
-    VkInstance instance;
-    VkDebugUtilsMessengerEXT debugMessenger;
+    VkInstance                   instance;
+    VkDebugUtilsMessengerEXT     debugMessenger;
 
-    VkPhysicalDevice physicalDevice;
-    VkDevice device;
+    VkPhysicalDevice             physicalDevice;
+    VkDevice                     device;
 
-    VmaAllocator allocator;
+    VmaAllocator                 allocator;
 
-    VkQueue graphicsQueue;
-    VkQueue presentQueue;
+    VkQueue                      graphicsQueue;
+    VkQueue                      presentQueue;
+
+    VkCommandPool                commandPool;
+    VkCommandPool                transientCommandPool;
+    std::vector<VkCommandBuffer> commandBuffers;
+
+    VkBuffer                     vertexBuffer;
+    VmaAllocation                vertexBufferMemory;
+    VkBuffer                     indexBuffer;
+    VmaAllocation                indexBufferMemory;
+
+    std::vector<VkBuffer>        uniformBuffers;
+    std::vector<VmaAllocation>   uniformBuffersMemory;
+    std::vector<void *>          uniformBuffersMapped;
+
+    VkDescriptorPool             descriptorPool;
+    std::vector<VkDescriptorSet> descriptorSets;
+    // clang-format on
 
     void nullifyHandles();
 
@@ -84,11 +106,11 @@ class Device
 
     void initMemoryAllocator();
 
-    std::vector<const char *> getRequiredExtensions();
+    void createVertexBuffer(VkDeviceSize buffer_size);
 
-    const QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
+    void createIndexBuffer(VkDeviceSize buffer_size);
 
-    const SwapchainSupportDetails querySwapchainSupport(VkPhysicalDevice device) const;
+    void createUniformBuffers(VkDeviceSize buffer_size);
 
     void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT &create_info);
 
