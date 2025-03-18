@@ -20,40 +20,40 @@ zh::Vulkan::~Vulkan()
     cleanup();
 }
 
-zh::Window zh::Vulkan::createWindow(const unsigned int width, const unsigned int height, const std::string &title)
-{
-    if (window != nullptr)
-        throw std::runtime_error("Failed to create window. Only one window instance is allowed.");
+// zh::Window zh::Vulkan::createWindow(const unsigned int width, const unsigned int height, const std::string &title)
+// {
+//     if (window != nullptr)
+//         throw std::runtime_error("Failed to create window. Only one window instance is allowed.");
 
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+//     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-    window = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
-    glfwSetWindowUserPointer(window, this);
-    glfwSetFramebufferSizeCallback(window, framebufferResizedCallback);
+//     window = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
+//     glfwSetWindowUserPointer(window, this);
+//     glfwSetFramebufferSizeCallback(window, framebufferResizedCallback);
 
-    if (glfwCreateWindowSurface(vkInstance, window, nullptr, &surface))
-        throw std::runtime_error("Failed to create window surface.");
+//     if (glfwCreateWindowSurface(vkInstance, window, nullptr, &surface))
+//         throw std::runtime_error("Failed to create window surface.");
 
-    pickPhysicalDevice();
-    createLogicalDevice();
-    initMemoryAllocator();
-    createSwapchain();
-    createImageViews();
-    createRenderPass();
-    createDescriptorSetLayout();
-    createGraphicsPipeline();
-    createFramebuffers();
-    createCommandPools();
-    createVertexBuffer();
-    createIndexBuffer();
-    createUniformBuffers();
-    createDescriptorPool();
-    createDescriptorSets();
-    createCommandBuffers();
-    createSyncObjects();
+//     pickPhysicalDevice();
+//     createLogicalDevice();
+//     initMemoryAllocator();
+//     createSwapchain();
+//     createImageViews();
+//     createRenderPass();
+//     createDescriptorSetLayout();
+//     createGraphicsPipeline();
+//     createFramebuffers();
+//     createCommandPools();
+//     createVertexBuffer();
+//     createIndexBuffer();
+//     createUniformBuffers();
+//     createDescriptorPool();
+//     createDescriptorSets();
+//     createCommandBuffers();
+//     createSyncObjects();
 
-    return Window(window, surface);
-}
+//     return Window(window, surface);
+// }
 
 void zh::Vulkan::drawFrameTemp()
 {

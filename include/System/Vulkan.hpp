@@ -55,7 +55,7 @@ class Vulkan
 
     ~Vulkan();
 
-    Window createWindow(const unsigned int width, const unsigned int height, const std::string &title);
+    // Window createWindow(const unsigned int width, const unsigned int height, const std::string &title);
 
     void drawFrameTemp();
 
