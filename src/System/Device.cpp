@@ -89,15 +89,15 @@ std::vector<const char *> zh::Device::getRequiredExtensions()
     return extensions;
 }
 
-const zh::Device::QueueFamilyIndices zh::Device::findQueueFamilies()
+const zh::Device::QueueFamilyIndices zh::Device::findQueueFamilies(VkPhysicalDevice &physical_device)
 {
     QueueFamilyIndices indices;
 
     uint32_t queue_family_count = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queue_family_count, nullptr);
+    vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count, nullptr);
 
     std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queue_family_count, queue_families.data());
+    vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count, queue_families.data());
 
     for (int i = 0; i < queue_families.size(); ++i)
     {
@@ -105,7 +105,7 @@ const zh::Device::QueueFamilyIndices zh::Device::findQueueFamilies()
             indices.graphicsFamily = i;
 
         VkBool32 present_support = false;
-        vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, window.getSurface(), &present_support);
+        vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, i, window.getSurface(), &present_support);
 
         if (present_support)
             indices.presentFamily = i;
@@ -117,29 +117,29 @@ const zh::Device::QueueFamilyIndices zh::Device::findQueueFamilies()
     return indices;
 }
 
-const zh::Device::SwapchainSupportDetails zh::Device::querySwapchainSupport() const
+const zh::Device::SwapchainSupportDetails zh::Device::querySwapchainSupport(VkPhysicalDevice &physical_device) const
 {
     SwapchainSupportDetails details;
 
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, window.getSurface(), &details.capabilities);
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, window.getSurface(), &details.capabilities);
 
     uint32_t format_count = 0;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, window.getSurface(), &format_count, nullptr);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, window.getSurface(), &format_count, nullptr);
 
     if (format_count != 0)
     {
         details.formats.resize(format_count);
-        vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, window.getSurface(), &format_count,
+        vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, window.getSurface(), &format_count,
                                              details.formats.data());
     }
 
     uint32_t present_modes_count = 0;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, window.getSurface(), &present_modes_count, nullptr);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, window.getSurface(), &present_modes_count, nullptr);
 
     if (present_modes_count != 0)
     {
         details.presentModes.resize(format_count);
-        vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, window.getSurface(), &present_modes_count,
+        vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, window.getSurface(), &present_modes_count,
                                                   details.presentModes.data());
     }
 
@@ -172,7 +172,7 @@ void zh::Device::initVulkanInstance()
     app_info.applicationVersion = VK_MAKE_VERSION(0, 0, 1);
     app_info.pEngineName = "Azha";
     app_info.engineVersion = VK_MAKE_VERSION(0, 0, 1);
-    app_info.apiVersion = VK_API_VERSION_1_4;
+    app_info.apiVersion = VK_API_VERSION_1_3;
 
     // Create info
     VkInstanceCreateInfo create_info{};
@@ -250,7 +250,7 @@ void zh::Device::pickAdequatePhysicalDevice()
 
 void zh::Device::createLogicalDevice()
 {
-    QueueFamilyIndices indices = findQueueFamilies();
+    QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 
     std::vector<VkDeviceQueueCreateInfo> queue_create_infos;
     std::set<uint32_t> unique_queue_families = {indices.getGraphicsFamily(), indices.getPresentFamily()};
@@ -418,13 +418,13 @@ const int zh::Device::rateDeviceSuitability(VkPhysicalDevice physical_device)
         score = -1;
 
     // Require a device with a valid queue familiy.
-    if (!findQueueFamilies().isComplete())
+    if (!findQueueFamilies(physical_device).isComplete())
         score = -1;
 
     // Require that swap chain is adequate
     if (extension_support)
     {
-        SwapchainSupportDetails details = querySwapchainSupport();
+        SwapchainSupportDetails details = querySwapchainSupport(physical_device);
         if (details.formats.empty() || details.presentModes.empty())
             score = -1;
     }

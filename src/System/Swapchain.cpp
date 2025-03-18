@@ -28,13 +28,13 @@ void zh::Swapchain::create()
 {
     createSwapchain();
     createImageViews();
-    createFramebuffers();
     createRenderPass();
+    createFramebuffers();
 }
 
 void zh::Swapchain::createSwapchain()
 {
-    Device::SwapchainSupportDetails swap_chain_support = device.querySwapchainSupport();
+    Device::SwapchainSupportDetails swap_chain_support = device.querySwapchainSupport(device.getPhysicalDevice());
     VkSurfaceFormatKHR format = chooseSurfaceFormat(swap_chain_support.formats);
     VkPresentModeKHR mode = choosePresentMode(swap_chain_support.presentModes);
     VkExtent2D extent = chooseExtent(swap_chain_support.capabilities);
@@ -54,7 +54,7 @@ void zh::Swapchain::createSwapchain()
     create_info.imageArrayLayers = 1;
     create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-    Device::QueueFamilyIndices indices = device.findQueueFamilies();
+    Device::QueueFamilyIndices indices = device.findQueueFamilies(device.getPhysicalDevice());
     uint32_t queue_family_indices[] = {indices.getGraphicsFamily(), indices.getPresentFamily()};
 
     if (indices.graphicsFamily != indices.presentFamily)
@@ -115,28 +115,6 @@ void zh::Swapchain::createImageViews()
     }
 }
 
-void zh::Swapchain::createFramebuffers()
-{
-    swapchainFramebuffers.resize(swapchainImageViews.size());
-
-    for (size_t i = 0; i < swapchainImageViews.size(); ++i)
-    {
-        VkImageView attachments[] = {swapchainImageViews[i]};
-
-        VkFramebufferCreateInfo create_info{};
-        create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        create_info.renderPass = renderPass;
-        create_info.attachmentCount = 1;
-        create_info.pAttachments = attachments;
-        create_info.width = swapchainExtent.width;
-        create_info.height = swapchainExtent.height;
-        create_info.layers = 1;
-
-        if (vkCreateFramebuffer(device.getLogicalDevice(), &create_info, nullptr, &swapchainFramebuffers[i]) != VK_SUCCESS)
-            throw std::runtime_error("zh::Swapchain::createImageViews: FAILED TO CREATE FRAMEBUFFER");
-    }
-}
-
 void zh::Swapchain::createRenderPass()
 {
     VkAttachmentDescription color_attachment{};
@@ -177,6 +155,29 @@ void zh::Swapchain::createRenderPass()
 
     if (vkCreateRenderPass(device.getLogicalDevice(), &render_pass_info, nullptr, &renderPass) != VK_SUCCESS)
         throw std::runtime_error("zh::Swapchain::createImageViews: FAILED TO CREATE RENDER PASS");
+}
+
+void zh::Swapchain::createFramebuffers()
+{
+    swapchainFramebuffers.resize(swapchainImageViews.size());
+
+    for (size_t i = 0; i < swapchainImageViews.size(); ++i)
+    {
+        VkImageView attachments[] = {swapchainImageViews[i]};
+
+        VkFramebufferCreateInfo create_info{};
+        create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        create_info.renderPass = renderPass;
+        create_info.attachmentCount = 1;
+        create_info.pAttachments = attachments;
+        create_info.width = swapchainExtent.width;
+        create_info.height = swapchainExtent.height;
+        create_info.layers = 1;
+
+        if (vkCreateFramebuffer(device.getLogicalDevice(), &create_info, nullptr, &swapchainFramebuffers[i]) !=
+            VK_SUCCESS)
+            throw std::runtime_error("zh::Swapchain::createImageViews: FAILED TO CREATE FRAMEBUFFER");
+    }
 }
 
 VkSurfaceFormatKHR zh::Swapchain::chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &available_formats)

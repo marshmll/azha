@@ -18,6 +18,8 @@ class Pipeline
 
     Pipeline operator=(const Pipeline &) = delete;
 
+    ~Pipeline();
+
   private:
     Device &device;
     Swapchain &swapchain;

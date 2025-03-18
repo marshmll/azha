@@ -24,10 +24,12 @@ class Swapchain
     VkSwapchainKHR swapchain;
     VkFormat swapchainImageFormat;
     VkExtent2D swapchainExtent;
+
+    VkRenderPass renderPass;
+
     std::vector<VkImage> swapchainImages;
     std::vector<VkImageView> swapchainImageViews;
     std::vector<VkFramebuffer> swapchainFramebuffers;
-    VkRenderPass renderPass;
 
     void create();
 
@@ -35,9 +37,9 @@ class Swapchain
 
     void createImageViews();
 
-    void createFramebuffers();
-
     void createRenderPass();
+
+    void createFramebuffers();
 
     VkSurfaceFormatKHR chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &available_formats);
 

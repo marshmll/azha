@@ -53,9 +53,9 @@ class Device
 
     std::vector<const char *> getRequiredExtensions();
 
-    const QueueFamilyIndices findQueueFamilies();
+    const QueueFamilyIndices findQueueFamilies(VkPhysicalDevice &physical_device);
 
-    const SwapchainSupportDetails querySwapchainSupport() const;
+    const SwapchainSupportDetails querySwapchainSupport(VkPhysicalDevice &physical_device) const;
 
   private:
     // clang-format off

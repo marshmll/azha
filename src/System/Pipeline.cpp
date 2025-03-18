@@ -8,6 +8,12 @@ zh::Pipeline::Pipeline(Device &device, Swapchain &swapchain, const std::string &
     createPipeline(vertex_shader_path, fragment_shader_path);
 }
 
+zh::Pipeline::~Pipeline()
+{
+    vkDestroyPipelineLayout(device.getLogicalDevice(), pipelineLayout, nullptr);
+    vkDestroyPipeline(device.getLogicalDevice(), pipeline, nullptr);
+}
+
 void zh::Pipeline::createPipeline(const std::string &vertex_shader_path, const std::string &fragment_shader_path)
 {
     VkShaderModule vert_shader_module;
@@ -116,8 +122,10 @@ void zh::Pipeline::createPipeline(const std::string &vertex_shader_path, const s
 
     // Pipeline Layout
     VkPipelineLayoutCreateInfo pipeline_layout_info{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-    pipeline_layout_info.setLayoutCount = 1;
-    pipeline_layout_info.pSetLayouts = &descriptorSetLayout;
+    // pipeline_layout_info.setLayoutCount = 1;
+    // pipeline_layout_info.pSetLayouts = &descriptorSetLayout; // TEMP!!!
+    pipeline_layout_info.setLayoutCount = 0;
+    pipeline_layout_info.pSetLayouts = nullptr;
     pipeline_layout_info.pushConstantRangeCount = 0;
     pipeline_layout_info.pPushConstantRanges = nullptr;
 
