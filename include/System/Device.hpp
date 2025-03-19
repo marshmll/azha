@@ -1,6 +1,7 @@
 #pragma once
 
 #include "System/Buffer.hpp"
+#include "System/StagingBuffer.hpp"
 #include "System/Window.hpp"
 
 namespace zh
@@ -48,6 +49,14 @@ class Device
     VkPhysicalDevice &getPhysicalDevice();
 
     VkDevice &getLogicalDevice();
+
+    VmaAllocator &getAllocator();
+
+    VkQueue &getTransferQueue();
+
+    VkCommandPool &getCommandPool();
+
+    VkCommandPool &getTransientCommandPool();
 
     const bool checkValidationLayerSupport();
 
@@ -106,11 +115,9 @@ class Device
 
     void initMemoryAllocator();
 
-    void createVertexBuffer(VkDeviceSize buffer_size);
+    void createCommandPools();
 
-    void createIndexBuffer(VkDeviceSize buffer_size);
-
-    void createUniformBuffers(VkDeviceSize buffer_size);
+    // void createUniformBuffers(VkDeviceSize buffer_size);
 
     void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT &create_info);
 

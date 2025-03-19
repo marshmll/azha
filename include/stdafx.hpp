@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <chrono>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 
 #define GLFW_INCLUDE_VULKAN

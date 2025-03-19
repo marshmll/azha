@@ -10,21 +10,13 @@ zh::Device::Device(Window &window) : window(window)
     pickAdequatePhysicalDevice();
     createLogicalDevice();
     initMemoryAllocator();
-    createVertexBuffer(1);
-    createIndexBuffer(1);
-    createUniformBuffers(1);
+    createCommandPools();
 }
 
 zh::Device::~Device()
 {
-    for (size_t i = 0; i < Device::MAX_FRAMES_IN_FLIGHT; i++)
-    {
-        vmaUnmapMemory(allocator, uniformBuffersMemory[i]);
-        vmaDestroyBuffer(allocator, uniformBuffers[i], uniformBuffersMemory[i]);
-    }
-
-    vmaDestroyBuffer(allocator, indexBuffer, indexBufferMemory);
-    vmaDestroyBuffer(allocator, vertexBuffer, vertexBufferMemory);
+    vkDestroyCommandPool(device, transientCommandPool, nullptr);
+    vkDestroyCommandPool(device, commandPool, nullptr);
     vmaDestroyAllocator(allocator);
     vkDestroySurfaceKHR(instance, window.getSurface(), nullptr);
     vkDestroyDevice(device, nullptr);
@@ -42,6 +34,26 @@ VkPhysicalDevice &zh::Device::getPhysicalDevice()
 VkDevice &zh::Device::getLogicalDevice()
 {
     return device;
+}
+
+VmaAllocator &zh::Device::getAllocator()
+{
+    return allocator;
+}
+
+VkQueue &zh::Device::getTransferQueue()
+{
+    return graphicsQueue; // TEMP!!!!!!!!
+}
+
+VkCommandPool &zh::Device::getCommandPool()
+{
+    return commandPool;
+}
+
+VkCommandPool &zh::Device::getTransientCommandPool()
+{
+    return transientCommandPool;
 }
 
 const bool zh::Device::checkValidationLayerSupport()
@@ -311,68 +323,45 @@ void zh::Device::initMemoryAllocator()
         throw std::runtime_error("zh::Device::initMemoryAllocator: FAILED TO INITIALIZE VMA MEMORY ALLOCATOR");
 }
 
-void zh::Device::createVertexBuffer(VkDeviceSize buffer_size)
+void zh::Device::createCommandPools()
 {
-    VkBuffer staging_buffer;
-    VmaAllocation staging_buffer_memory;
+    QueueFamilyIndices queue_family_indices = findQueueFamilies(physicalDevice);
 
-    Buffer::stagingBuffer(allocator, buffer_size, staging_buffer, staging_buffer_memory);
+    VkCommandPoolCreateInfo command_pool_info{};
+    command_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    command_pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    command_pool_info.queueFamilyIndex = queue_family_indices.getGraphicsFamily();
 
-    // void *data;
+    if (vkCreateCommandPool(device, &command_pool_info, nullptr, &commandPool) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create the Command Pool.");
 
-    // vmaMapMemory(allocator, staging_buffer_memory, &data);
-    // std::memcpy(data, vertices, static_cast<size_t>(buffer_size));
-    // vmaUnmapMemory(allocator, staging_buffer_memory);
+    VkCommandPoolCreateInfo transient_command_pool_info{};
+    transient_command_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    transient_command_pool_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+    transient_command_pool_info.queueFamilyIndex = queue_family_indices.getGraphicsFamily();
 
-    Buffer::create(allocator, buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
-                   VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT, vertexBuffer, vertexBufferMemory);
-
-    // Buffer::copy(device, graphicsQueue, staging_buffer, vertexBuffer, buffer_size);
-
-    vmaDestroyBuffer(allocator, staging_buffer, staging_buffer_memory);
+    if (vkCreateCommandPool(device, &transient_command_pool_info, nullptr, &transientCommandPool) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create a transient Command Pool.");
 }
 
-void zh::Device::createIndexBuffer(VkDeviceSize buffer_size)
-{
-    VkBuffer staging_buffer;
-    VmaAllocation staging_buffer_memory;
+// void zh::Device::createUniformBuffers(VkDeviceSize buffer_size)
+// {
+//     uniformBuffers.resize(buffer_size);
+//     uniformBuffersMemory.resize(buffer_size);
+//     uniformBuffersMapped.resize(buffer_size);
 
-    Buffer::stagingBuffer(allocator, buffer_size, staging_buffer, staging_buffer_memory);
+//     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+//     {
+//         Buffer::create(allocator, buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+//                        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+//                        VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+//                        VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
+//                            VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
+//                        uniformBuffers[i], uniformBuffersMemory[i]);
 
-    void *data;
-
-    // vmaMapMemory(allocator, staging_buffer_memory, &data);
-    // std::memcpy(data, indices, static_cast<size_t>(buffer_size));
-    // vmaUnmapMemory(allocator, staging_buffer_memory);
-
-    Buffer::create(allocator, buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
-                   VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT, indexBuffer, indexBufferMemory);
-
-    // Buffer::copy(device, graphicsQueue, staging_buffer, indexBuffer, buffer_size);
-
-    vmaDestroyBuffer(allocator, staging_buffer, staging_buffer_memory);
-}
-
-void zh::Device::createUniformBuffers(VkDeviceSize buffer_size)
-{
-    uniformBuffers.resize(buffer_size);
-    uniformBuffersMemory.resize(buffer_size);
-    uniformBuffersMapped.resize(buffer_size);
-
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
-    {
-        Buffer::create(allocator, buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                       VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
-                       VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
-                           VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
-                       uniformBuffers[i], uniformBuffersMemory[i]);
-
-        vmaMapMemory(allocator, uniformBuffersMemory[i], &uniformBuffersMapped[i]);
-    }
-}
+//         vmaMapMemory(allocator, uniformBuffersMemory[i], &uniformBuffersMapped[i]);
+//     }
+// }
 
 void zh::Device::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT &create_info)
 {

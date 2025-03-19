@@ -2,6 +2,8 @@
 
 #include "stdafx.hpp"
 
+typedef uint32_t Index;
+
 struct Vertex
 {
     glm::vec2 pos;
