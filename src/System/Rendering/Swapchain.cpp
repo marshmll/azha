@@ -7,15 +7,15 @@ zh::Swapchain::Swapchain(Device &device, Window &window)
     create();
 }
 
-const bool zh::Swapchain::compareSwapFormats(const Swapchain &swapchain) const
-{
-    return swapchain.getDepthFormat() == getDepthFormat() && swapchain.getImageFormat() == getImageFormat();
-}
-
 zh::Swapchain::Swapchain(Device &device, Window &window, VkSwapchainKHR old_swapchain)
     : device(device), window(window), oldSwapchain(old_swapchain), currentFrame(0)
 {
     create();
+}
+
+const bool zh::Swapchain::compareSwapFormats(const Swapchain &swapchain) const
+{
+    return swapchain.getDepthFormat() == getDepthFormat() && swapchain.getImageFormat() == getImageFormat();
 }
 
 VkResult zh::Swapchain::acquireNextImage(uint32_t *image_index)
@@ -114,10 +114,25 @@ VkFramebuffer &zh::Swapchain::getFramebuffer(const int index)
 
 zh::Swapchain::~Swapchain()
 {
+    vkDeviceWaitIdle(device.getLogicalDevice());
+
     vkDestroyRenderPass(device.getLogicalDevice(), renderPass, nullptr);
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        vkDestroySemaphore(device.getLogicalDevice(), renderFinishedSemaphores[i], nullptr);
+        vkDestroySemaphore(device.getLogicalDevice(), imageAvailableSemaphores[i], nullptr);
+        vkDestroyFence(device.getLogicalDevice(), inFlightFences[i], nullptr);
+    }
 
     for (auto &framebuffer : framebuffers)
         vkDestroyFramebuffer(device.getLogicalDevice(), framebuffer, nullptr);
+
+    for (int i = 0; i < depthImages.size(); i++)
+    {
+        vkDestroyImageView(device.getLogicalDevice(), depthImageViews[i], nullptr);
+        vmaDestroyImage(device.getAllocator(), depthImages[i], depthImagesMemory[i]);
+    }
 
     for (auto &view : imageViews)
         vkDestroyImageView(device.getLogicalDevice(), view, nullptr);

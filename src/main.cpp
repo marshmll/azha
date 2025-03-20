@@ -1,4 +1,5 @@
 #include "stdafx.hpp"
+#include "System/Rendering/Swapchain.hpp"
 #include "System/Rendering/Descriptors.hpp"
 #include "System/Rendering/Pipeline.hpp"
 #include "System/Scene/Object.hpp"
