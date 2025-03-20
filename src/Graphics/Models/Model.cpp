@@ -1,19 +1,24 @@
 #include "stdafx.hpp"
-#include "System/Model.hpp"
+#include "Graphics/Models/Model.hpp"
 
-zh::Model::Model(Device &device, const std::string &path) : device(device), hasIndexBuffer(false)
+zh::Model::Model(Device &device) : device(device)
+{
+
+}
+
+zh::Model::Model(Device &device, const std::string &path) : device(device), hasIndexBuffer(false), loaded(false)
 {
     loadFromFile(path);
 }
 
-zh::Model::Model(Device &device, const std::vector<Vertex> &vertices) : device(device), hasIndexBuffer(false)
+zh::Model::Model(Device &device, const std::vector<Vertex> &vertices) : device(device), hasIndexBuffer(false), loaded(true)
 {
     vertexCount = static_cast<uint32_t>(vertices.size());
     indexCount = 0;
 }
 
 zh::Model::Model(Device &device, std::vector<Vertex> vertices, std::vector<Index> indices)
-    : device(device), hasIndexBuffer(true)
+    : device(device), hasIndexBuffer(true), loaded(true)
 {
     vertexCount = static_cast<uint32_t>(vertices.size());
     indexCount = static_cast<uint32_t>(indices.size());
@@ -26,7 +31,8 @@ zh::Model::~Model() = default;
 
 const bool zh::Model::loadFromFile(const std::string &path)
 {
-    return true;
+    loaded = true;
+    return loaded;
 }
 
 void zh::Model::draw(VkCommandBuffer &command_buffer)

@@ -1,5 +1,5 @@
 #include "stdafx.hpp"
-#include "System/Device.hpp"
+#include "System/Core/Device.hpp"
 
 zh::Device::Device(Window &window) : window(window)
 {
@@ -26,6 +26,19 @@ zh::Device::~Device()
     vkDestroyInstance(instance, nullptr);
 }
 
+void zh::Device::createImageWithInfo(const VkImageCreateInfo &image_info, const VkMemoryPropertyFlags &properties,
+                                     VkImage &image, VmaAllocation &image_memory)
+{
+    VmaAllocationCreateInfo alloc_create_info{};
+    alloc_create_info.usage = VMA_MEMORY_USAGE_AUTO;
+    alloc_create_info.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+    alloc_create_info.priority = 1.f;
+    alloc_create_info.requiredFlags = properties;
+
+    if (vmaCreateImage(allocator, &image_info, &alloc_create_info, &image, &image_memory, nullptr) != VK_SUCCESS)
+        throw std::runtime_error("zh::Device::createImageWithInfo: FAILED TO CREATE IMAGE");
+}
+
 VkPhysicalDevice &zh::Device::getPhysicalDevice()
 {
     return physicalDevice;
@@ -39,6 +52,16 @@ VkDevice &zh::Device::getLogicalDevice()
 VmaAllocator &zh::Device::getAllocator()
 {
     return allocator;
+}
+
+VkQueue &zh::Device::getGraphicsQueue()
+{
+    return graphicsQueue;
+}
+
+VkQueue &zh::Device::getPresentQueue()
+{
+    return presentQueue;
 }
 
 VkQueue &zh::Device::getTransferQueue()
@@ -156,6 +179,27 @@ const zh::Device::SwapchainSupportDetails zh::Device::querySwapchainSupport(VkPh
     }
 
     return details;
+}
+
+VkFormat zh::Device::findSupportedFormat(const std::vector<VkFormat> &candidates, VkImageTiling tiling,
+                                         VkFormatFeatureFlags features)
+{
+    for (auto &format : candidates)
+    {
+        VkFormatProperties props;
+        vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);
+
+        if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features)
+        {
+            return format;
+        }
+        else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features)
+        {
+            return format;
+        }
+    }
+
+    throw std::runtime_error("zh::Device::findSupportedFormat: FAILED TO FIND A SUPPORTED FORMAT");
 }
 
 void zh::Device::nullifyHandles()

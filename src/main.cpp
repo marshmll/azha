@@ -1,6 +1,8 @@
 #include "stdafx.hpp"
-#include "System/Pipeline.hpp"
-#include "System/Model.hpp"
+#include "System/Rendering/Descriptors.hpp"
+#include "System/Rendering/Pipeline.hpp"
+#include "System/Scene/Object.hpp"
+#include "Graphics/Rendering/Renderer.hpp"
 
 const Vertex VERTICES[] = {
     {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f, 1.0f}},
@@ -25,7 +27,14 @@ int main()
     zh::Device device(window);
     zh::Swapchain swapchain(device, window);
     zh::Pipeline pipeline(device, swapchain, "Assets/Shaders/vert.spv", "Assets/Shaders/frag.spv");
-    zh::Model model(device, vertices, indices);
+
+    VkDescriptorPoolSize pool_size{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, zh::Swapchain::MAX_FRAMES_IN_FLIGHT};
+    zh::DescriptorPool global_descriptor_pool(device, zh::Swapchain::MAX_FRAMES_IN_FLIGHT, 0, {pool_size});
+
+    zh::Object object(device);
+    object.loadModelFromData(vertices, indices);
+
+    zh::Renderer renderer(device, window);
 
     while (!window.shouldClose())
     {

@@ -1,8 +1,10 @@
 #pragma once
 
-#include "System/Buffer.hpp"
-#include "System/StagingBuffer.hpp"
-#include "System/Window.hpp"
+#include <vk_mem_alloc.h>
+
+#include "System/Memory/Buffer.hpp"
+#include "System/Memory/StagingBuffer.hpp"
+#include "System/Core/Window.hpp"
 
 namespace zh
 {
@@ -12,7 +14,6 @@ class Device
     inline static const std::vector<const char *> VALIDATION_LAYERS = {"VK_LAYER_KHRONOS_validation"};
     inline static const std::vector<const char *> DEVICE_EXTENSIONS = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
                                                                        VK_EXT_MEMORY_BUDGET_EXTENSION_NAME};
-    static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
     struct QueueFamilyIndices
     {
@@ -46,11 +47,18 @@ class Device
 
     ~Device();
 
+    void createImageWithInfo(const VkImageCreateInfo &image_info, const VkMemoryPropertyFlags &properties,
+                             VkImage &image, VmaAllocation &image_memory);
+
     VkPhysicalDevice &getPhysicalDevice();
 
     VkDevice &getLogicalDevice();
 
     VmaAllocator &getAllocator();
+
+    VkQueue &getGraphicsQueue();
+
+    VkQueue &getPresentQueue();
 
     VkQueue &getTransferQueue();
 
@@ -65,6 +73,9 @@ class Device
     const QueueFamilyIndices findQueueFamilies(VkPhysicalDevice &physical_device);
 
     const SwapchainSupportDetails querySwapchainSupport(VkPhysicalDevice &physical_device) const;
+
+    VkFormat findSupportedFormat(const std::vector<VkFormat> &candidates, VkImageTiling tiling,
+                                 VkFormatFeatureFlags features);
 
   private:
     // clang-format off

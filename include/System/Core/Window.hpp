@@ -5,7 +5,7 @@ namespace zh
 class Window
 {
   public:
-    Window(const unsigned short width, const unsigned short height, const std::string &title);
+    Window(const int width, const int height, const std::string &title);
 
     Window() = delete;
 
@@ -25,6 +25,8 @@ class Window
 
     VkSurfaceKHR &getSurface();
 
+    VkExtent2D getExtent();
+
     const bool getFramebufferResized() const;
 
     void setFramebufferResized(const bool resized);
@@ -32,6 +34,9 @@ class Window
   private:
     GLFWwindow *window;
     VkSurfaceKHR surface;
+
+    int width;
+    int height;
     bool framebufferResized;
 
     static void framebufferResizedCallback(GLFWwindow *window, int width, int height);

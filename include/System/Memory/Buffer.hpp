@@ -27,6 +27,8 @@ class Buffer
 
     void map();
 
+    void map(void *&mmem);
+
     void write(void *data, const size_t size);
 
     void unmap();

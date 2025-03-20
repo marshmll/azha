@@ -1,12 +1,14 @@
 #include "stdafx.hpp"
-#include "System/Window.hpp"
+#include "System/Core/Window.hpp"
 
-zh::Window::Window(const unsigned short width, const unsigned short height, const std::string &title)
-    : window(nullptr), surface(VK_NULL_HANDLE)
+zh::Window::Window(const int width, const int height, const std::string &title)
+    : window(nullptr), surface(VK_NULL_HANDLE), width(width), height(height)
 {
+    assert(width > 0 && height > 0 && "zh::Window::Window: WINDOW DIMENSIONS CANNOT BE ZERO OR NEGATIVE");
+
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    window = glfwCreateWindow((int)width, (int)height, title.c_str(), nullptr, nullptr);
+    window = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
     glfwSetWindowUserPointer(window, this);
     glfwSetFramebufferSizeCallback(window, framebufferResizedCallback);
 }
@@ -40,6 +42,11 @@ void zh::Window::createSurface(VkInstance &instance)
 VkSurfaceKHR &zh::Window::getSurface()
 {
     return surface;
+}
+
+VkExtent2D zh::Window::getExtent()
+{
+    return VkExtent2D{static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
 }
 
 const bool zh::Window::getFramebufferResized() const

@@ -1,5 +1,5 @@
 #include "stdafx.hpp"
-#include "System/Buffer.hpp"
+#include "System/Memory/Buffer.hpp"
 
 zh::Buffer::Buffer(VmaAllocator &allocator, VkDeviceSize size, VkBufferUsageFlags usage,
                    VkMemoryPropertyFlags properties, VmaMemoryUsage memory_usage,
@@ -41,6 +41,19 @@ void zh::Buffer::map()
 
     VkResult result = vmaMapMemory(allocator, memory, &mmem);
     assert(result == VK_SUCCESS && "zh::Buffer::map: FAILED TO MAP MEMORY");
+}
+
+void zh::Buffer::map(void *&mmem)
+{
+    assert(allocator != VK_NULL_HANDLE && "zh::Buffer::map: ALLOCATOR IS NOT INITIALIZED");
+    assert(memory != VK_NULL_HANDLE && "zh::Buffer::map: MEMORY IS NOT INITIALIZED");
+    assert(this->mmem == nullptr && "zh::Buffer::map: TRYING TO MAP ALREADY MAPPED BUFFER");
+    assert(mmem != nullptr && "zh::Buffer::map: TRYING TO MAP TO NULL POINTER");
+    assert(mappable == true && "zh::Buffer::map: MEMORY IS NOT MAPPABLE");
+
+    VkResult result = vmaMapMemory(allocator, memory, &mmem);
+    assert(result == VK_SUCCESS && "zh::Buffer::map: FAILED TO MAP MEMORY");
+    this->mmem = mmem;
 }
 
 void zh::Buffer::write(void *data, const size_t size)

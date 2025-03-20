@@ -1,6 +1,6 @@
 #pragma once
 
-#include "System/Device.hpp"
+#include "System/Core/Device.hpp"
 
 namespace zh
 {
@@ -23,6 +23,8 @@ class DescriptorSetLayout
 
     DescriptorSetLayout(Device &device, const std::unordered_map<uint32_t, VkDescriptorSetLayoutBinding> &bindings);
     ~DescriptorSetLayout();
+
+    DescriptorSetLayout() = delete;
     DescriptorSetLayout(const DescriptorSetLayout &) = delete;
     DescriptorSetLayout &operator=(const DescriptorSetLayout &) = delete;
 
@@ -41,23 +43,6 @@ class DescriptorSetLayout
 class DescriptorPool
 {
   public:
-    class Builder
-    {
-      public:
-        Builder(Device &device);
-
-        Builder &addPoolSize(VkDescriptorType descriptor_type, const uint32_t count);
-        Builder &setPoolFlags(VkDescriptorPoolCreateFlags flags);
-        Builder &setMaxSets(const uint32_t count);
-        std::unique_ptr<DescriptorPool> build() const;
-
-      private:
-        Device &device;
-        std::vector<VkDescriptorPoolSize> poolSizes;
-        uint32_t maxSets;
-        VkDescriptorPoolCreateFlags poolFlags;
-    };
-
     DescriptorPool(Device &device, const uint32_t max_sets, VkDescriptorPoolCreateFlags pool_flags,
                    const std::vector<VkDescriptorPoolSize> &pool_sizes);
     ~DescriptorPool();

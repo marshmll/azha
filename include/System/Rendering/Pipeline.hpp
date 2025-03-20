@@ -1,8 +1,8 @@
 #pragma once
 
-#include "Graphics/Vertex.hpp"
-#include "Graphics/UniformBufferObject.hpp"
-#include "System/Swapchain.hpp"
+#include "Graphics/Vertex/Vertex.hpp"
+#include "Graphics/Uniform/UniformBufferObject.hpp"
+#include "System/Rendering/Swapchain.hpp"
 
 namespace zh
 {

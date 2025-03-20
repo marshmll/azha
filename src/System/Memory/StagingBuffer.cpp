@@ -1,5 +1,5 @@
 #include "stdafx.hpp"
-#include "System/StagingBuffer.hpp"
+#include "System/Memory/StagingBuffer.hpp"
 
 zh::StagingBuffer::StagingBuffer(VmaAllocator &allocator, VkDeviceSize buffer_size)
     : Buffer(allocator, buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,

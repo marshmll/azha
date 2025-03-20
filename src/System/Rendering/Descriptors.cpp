@@ -1,5 +1,5 @@
 #include "stdafx.hpp"
-#include "System/Descriptors.hpp"
+#include "System/Rendering/Descriptors.hpp"
 
 zh::DescriptorSetLayout::Builder::Builder(Device &device) : device(device)
 {
@@ -63,43 +63,6 @@ const std::unordered_map<uint32_t, VkDescriptorSetLayoutBinding> &zh::Descriptor
 VkDescriptorSetLayoutBinding &zh::DescriptorSetLayout::getBinding(const uint32_t binding)
 {
     return bindings.at(binding);
-}
-
-zh::DescriptorPool::Builder::Builder(Device &device) : device(device)
-{
-    maxSets = 1000;
-    poolFlags = 0;
-}
-
-zh::DescriptorPool::Builder &zh::DescriptorPool::Builder::addPoolSize(VkDescriptorType descriptor_type,
-                                                                      const uint32_t count)
-{
-    VkDescriptorPoolSize pool_size{};
-    pool_size.type = descriptor_type;
-    pool_size.descriptorCount = count;
-
-    poolSizes.push_back(pool_size);
-
-    return *this;
-}
-
-zh::DescriptorPool::Builder &zh::DescriptorPool::Builder::setPoolFlags(VkDescriptorPoolCreateFlags flags)
-{
-    poolFlags = flags;
-
-    return *this;
-}
-
-zh::DescriptorPool::Builder &zh::DescriptorPool::Builder::setMaxSets(const uint32_t count)
-{
-    maxSets = count;
-
-    return *this;
-}
-
-std::unique_ptr<zh::DescriptorPool> zh::DescriptorPool::Builder::build() const
-{
-    return std::make_unique<DescriptorPool>(device, maxSets, poolFlags, poolSizes);
 }
 
 zh::DescriptorPool::DescriptorPool(Device &device, const uint32_t max_sets, VkDescriptorPoolCreateFlags pool_flags,

@@ -1,5 +1,5 @@
 #include "stdafx.hpp"
-#include "System/Pipeline.hpp"
+#include "System/Rendering/Pipeline.hpp"
 
 zh::Pipeline::Pipeline(Device &device, Swapchain &swapchain, const std::string &vertex_shader_path,
                        const std::string &fragment_shader_path)

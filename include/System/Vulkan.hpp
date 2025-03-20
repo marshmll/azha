@@ -2,9 +2,9 @@
 
 #include "vk_mem_alloc.h"
 
-#include "System/Window.hpp"
-#include "Graphics/Vertex.hpp"
-#include "Graphics/UniformBufferObject.hpp"
+#include "System/Core/Window.hpp"
+#include "Graphics/Vertex/Vertex.hpp"
+#include "Graphics/Uniform/UniformBufferObject.hpp"
 
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
